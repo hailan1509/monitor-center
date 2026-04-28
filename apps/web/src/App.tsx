@@ -123,6 +123,7 @@ export function App() {
   const [user, setUser] = useState<User | null>(null);
   const [nav, setNav] = useState<NavKey>("overview");
   const [showPassword, setShowPassword] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [snapshot, setSnapshot] = useState<DashboardSnapshot>(emptySnapshot);
   const [liveLogs, setLiveLogs] = useState<LogEvent[]>([]);
   const [searchResults, setSearchResults] = useState<LogEvent[]>([]);
@@ -139,6 +140,15 @@ export function App() {
 
   const pendingRequests = useSyncExternalStore(apiLoadingStore.subscribe, apiLoadingStore.getSnapshot, () => 0);
   const showLoading = pendingRequests > 0;
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem("mc:sidebarCollapsed");
+    if (stored === "true") setSidebarCollapsed(true);
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("mc:sidebarCollapsed", sidebarCollapsed ? "true" : "false");
+  }, [sidebarCollapsed]);
 
   useEffect(() => {
     void api
@@ -304,7 +314,7 @@ export function App() {
   }
 
   return (
-    <main className="layout">
+    <main className={sidebarCollapsed ? "layout layout-collapsed" : "layout"}>
       {showLoading ? (
         <div className="global-loading-overlay" role="status" aria-live="polite" aria-label="Loading">
           <div className="global-loading-card">
@@ -313,13 +323,27 @@ export function App() {
           </div>
         </div>
       ) : null}
-      <aside className="sidebar">
+      <aside className={sidebarCollapsed ? "sidebar sidebar-collapsed" : "sidebar"}>
         <div className="brand">
           <div className="brand-mark">MC</div>
           <div className="brand-text">
             <div className="brand-title">Monitor Center</div>
             <div className="brand-subtitle">Logs & Observability</div>
           </div>
+          <button
+            type="button"
+            className="icon-button brand-toggle"
+            onClick={() => setSidebarCollapsed((value) => !value)}
+            aria-label={sidebarCollapsed ? "Expand menu" : "Collapse menu"}
+            title={sidebarCollapsed ? "Expand menu" : "Collapse menu"}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Zm6 0H6v12h4V6Zm2 0v12h6V6h-6Z"
+              />
+            </svg>
+          </button>
         </div>
 
         <nav className="menu">
@@ -338,6 +362,7 @@ export function App() {
                         type="button"
                         className={nav === item.key ? "menu-item active" : "menu-item"}
                         onClick={() => setNav(item.key)}
+                        title={sidebarCollapsed ? item.label : undefined}
                       >
                         <span className="menu-item-icon">{navIcons[item.key]}</span>
                         <span className="menu-item-label">{item.label}</span>
@@ -434,7 +459,7 @@ export function App() {
                   <h2 className="panel-title">Recent logs</h2>
                   <div className="muted small">Realtime via WebSocket</div>
                 </div>
-                <div className="table log-table">
+                <div className="table table-scroll log-table">
                   {visibleLiveLogs.slice(0, 80).map((log) => (
                     <button
                       key={`${log.id}-${log.timestamp}`}
@@ -459,7 +484,7 @@ export function App() {
                   <h2 className="panel-title">Top issues (24h)</h2>
                   <div className="muted small">Grouped by fingerprint</div>
                 </div>
-                <div className="table issue-table">
+                <div className="table table-scroll issue-table">
                   {snapshot.issues.map((issue: DashboardSnapshot["issues"][number]) => (
                     <button
                       key={issue.fingerprint}
