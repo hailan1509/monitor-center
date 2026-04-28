@@ -12,6 +12,7 @@
     "@google/generative-ai": "^0.24.1",
     "@monitor-center/shared": "file:../../packages/shared",
     "bcryptjs": "^2.4.3",
+    "connect-pg-simple": "^10.0.0",
     "cors": "^2.8.5",
     "dockerode": "^4.0.7",
     "dotenv": "^16.4.7",
@@ -24,6 +25,7 @@
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
+    "@types/connect-pg-simple": "^7.0.3",
     "@types/cors": "^2.8.17",
     "@types/dockerode": "^4.0.1",
     "@types/express": "^5.0.1",
