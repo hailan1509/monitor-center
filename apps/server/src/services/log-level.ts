@@ -10,7 +10,24 @@ const levelMatchers: Array<{ level: LogLevel; pattern: RegExp }> = [
   { level: "trace", pattern: /\btrace\b/i }
 ];
 
+function parseHttpStatusFromAccessLog(message: string): number | null {
+  // Common Nginx access log fragment:
+  // "GET /path HTTP/1.1" 200 1234
+  const match = message.match(/"([A-Z]+)\s+[^"]*\s+HTTP\/\d(?:\.\d)?\"\s+(\d{3})\b/);
+  if (!match) return null;
+  const status = Number(match[2]);
+  return Number.isFinite(status) ? status : null;
+}
+
 export function inferLogLevel(message: string, stream: "stdout" | "stderr"): LogLevel {
+  // If it's an HTTP access log, classify by status code.
+  const status = parseHttpStatusFromAccessLog(message);
+  if (status) {
+    if (status >= 500) return "error";
+    if (status >= 400) return "warn";
+    return "info";
+  }
+
   for (const matcher of levelMatchers) {
     if (matcher.pattern.test(message)) {
       return matcher.level;
@@ -18,7 +35,8 @@ export function inferLogLevel(message: string, stream: "stdout" | "stderr"): Log
   }
 
   if (stream === "stderr") {
-    return "error";
+    // stderr doesn't always mean error (some containers write normal logs to stderr).
+    return "warn";
   }
 
   return "unknown";
