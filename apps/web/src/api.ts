@@ -24,9 +24,16 @@ export const apiLoadingStore = {
   }
 };
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  pendingRequests += 1;
-  notifyLoadingListeners();
+type RequestOptions = {
+  silent?: boolean;
+};
+
+async function request<T>(path: string, init?: RequestInit, options?: RequestOptions): Promise<T> {
+  const silent = options?.silent === true;
+  if (!silent) {
+    pendingRequests += 1;
+    notifyLoadingListeners();
+  }
 
   try {
     const response = await fetch(path, {
@@ -45,8 +52,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
     return response.json() as Promise<T>;
   } finally {
-    pendingRequests = Math.max(0, pendingRequests - 1);
-    notifyLoadingListeners();
+    if (!silent) {
+      pendingRequests = Math.max(0, pendingRequests - 1);
+      notifyLoadingListeners();
+    }
   }
 }
 
@@ -76,7 +85,7 @@ export const api = {
       progress?: string;
       result?: { answer: string; context: Array<Record<string, unknown>> };
       error?: string;
-    }>(`/api/assistant/jobs/${encodeURIComponent(jobId)}`),
+    }>(`/api/assistant/jobs/${encodeURIComponent(jobId)}`, undefined, { silent: true }),
   users: () => request<{ users: Array<User & { createdAt: string }> }>("/api/users"),
   createUser: (payload: { email: string; password: string; displayName: string; role: UserRole }) =>
     request<{ user: { id: string } }>("/api/users", {

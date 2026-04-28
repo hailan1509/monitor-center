@@ -13,9 +13,12 @@ export const apiLoadingStore = {
         return pendingRequests;
     }
 };
-async function request(path, init) {
-    pendingRequests += 1;
-    notifyLoadingListeners();
+async function request(path, init, options) {
+    const silent = options?.silent === true;
+    if (!silent) {
+        pendingRequests += 1;
+        notifyLoadingListeners();
+    }
     try {
         const response = await fetch(path, {
             credentials: "include",
@@ -32,8 +35,10 @@ async function request(path, init) {
         return response.json();
     }
     finally {
-        pendingRequests = Math.max(0, pendingRequests - 1);
-        notifyLoadingListeners();
+        if (!silent) {
+            pendingRequests = Math.max(0, pendingRequests - 1);
+            notifyLoadingListeners();
+        }
     }
 }
 export const api = {
@@ -51,7 +56,7 @@ export const api = {
         method: "POST",
         body: JSON.stringify(payload)
     }),
-    getAssistantJob: (jobId) => request(`/api/assistant/jobs/${encodeURIComponent(jobId)}`),
+    getAssistantJob: (jobId) => request(`/api/assistant/jobs/${encodeURIComponent(jobId)}`, undefined, { silent: true }),
     users: () => request("/api/users"),
     createUser: (payload) => request("/api/users", {
         method: "POST",
