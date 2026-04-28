@@ -923,7 +923,6 @@ select:focus {
   }
 
   .sidebar-collapsed .brand-text,
-  .sidebar-collapsed .menu-item-label,
   .sidebar-collapsed .sidebar-footer .user-pill,
   .sidebar-collapsed .menu-section-title {
     display: initial;
