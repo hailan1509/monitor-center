@@ -1,8 +1,10 @@
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import OpenAI from "openai";
 import { env } from "../config/env.js";
 import { searchLogs } from "./log-repository.js";
 
-const client = env.OPENAI_API_KEY ? new OpenAI({ apiKey: env.OPENAI_API_KEY }) : null;
+const openaiClient = env.OPENAI_API_KEY ? new OpenAI({ apiKey: env.OPENAI_API_KEY }) : null;
+const geminiClient = env.GEMINI_API_KEY ? new GoogleGenerativeAI(env.GEMINI_API_KEY) : null;
 
 export async function answerLogQuestion(input: {
   question: string;
@@ -26,16 +28,57 @@ export async function answerLogQuestion(input: {
     message: log.message
   }));
 
-  if (!client) {
+  const contextText = JSON.stringify(summary, null, 2);
+  const systemText =
+    "You are an internal observability assistant. Answer using only the provided log context. If evidence is weak, say so. Highlight likely root causes, impacted service, and recommended next checks.";
+
+  if (geminiClient) {
+    try {
+      const model = geminiClient.getGenerativeModel({
+        model: env.GEMINI_MODEL,
+        systemInstruction: systemText
+      });
+
+      const result = await model.generateContent({
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                text: `Question: ${input.question}\n\nContext logs:\n${contextText}`
+              }
+            ]
+          }
+        ],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 800
+        }
+      });
+
+      return {
+        answer: result.response.text(),
+        context: summary
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      return {
+        answer: `Không gọi được Gemini lúc này. Lý do: ${message}`,
+        context: summary
+      };
+    }
+  }
+
+  if (!openaiClient) {
     return {
       answer:
-        "OPENAI_API_KEY chưa được cấu hình. Hệ thống đã trả về dữ liệu log thô để bạn kiểm tra trong dashboard, nhưng AI assistant chưa thể phân tích sâu.",
+        "Chưa cấu hình AI key. Hãy set GEMINI_API_KEY (khuyến nghị) hoặc OPENAI_API_KEY để bật AI assistant.",
       context: summary
     };
   }
 
   try {
-    const response = await client.responses.create({
+    const response = await openaiClient.responses.create({
       model: env.OPENAI_MODEL,
       input: [
         {
@@ -43,8 +86,7 @@ export async function answerLogQuestion(input: {
           content: [
             {
               type: "input_text",
-              text:
-                "You are an internal observability assistant. Answer using only the provided log context. If evidence is weak, say so. Highlight likely root causes, impacted service, and recommended next checks."
+              text: systemText
             }
           ]
         },
@@ -53,7 +95,7 @@ export async function answerLogQuestion(input: {
           content: [
             {
               type: "input_text",
-              text: `Question: ${input.question}\n\nContext logs:\n${JSON.stringify(summary, null, 2)}`
+              text: `Question: ${input.question}\n\nContext logs:\n${contextText}`
             }
           ]
         }

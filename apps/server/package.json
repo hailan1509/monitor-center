@@ -9,6 +9,7 @@
     "db:init": "node ../../node_modules/tsx/dist/cli.mjs src/scripts/init-db.ts"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@monitor-center/shared": "file:../../packages/shared",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
