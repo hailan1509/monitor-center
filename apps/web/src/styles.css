@@ -188,9 +188,16 @@ select {
   padding: 4px;
 }
 
+.sidebar-collapsed .menu-section-items {
+  justify-items: center;
+}
+
 .sidebar-collapsed .menu-item {
   grid-template-columns: 18px;
   justify-content: center;
+  width: 46px;
+  padding-left: 12px;
+  padding-right: 12px;
 }
 
 .sidebar-collapsed .sidebar-footer .user-pill {
@@ -929,8 +936,11 @@ select:focus {
   }
 
   .sidebar-collapsed .menu-item {
-    grid-template-columns: 18px auto;
-    justify-content: start;
+    grid-template-columns: 18px;
+    justify-content: center;
+    width: 46px;
+    padding-left: 12px;
+    padding-right: 12px;
   }
 
   .menu {
