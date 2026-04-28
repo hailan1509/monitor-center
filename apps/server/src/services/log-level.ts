@@ -24,5 +24,10 @@ export function inferLogLevel(message: string, stream: "stdout" | "stderr"): Log
 }
 
 export function normalizeMessage(raw: string) {
-  return raw.replace(/\u0000/g, "").trim();
+  // Clean up control characters and null bytes that can appear
+  // when logs are framed or contain binary.
+  return raw
+    .replace(/\u0000/g, "")
+    .replace(/[\u0001-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+    .trim();
 }

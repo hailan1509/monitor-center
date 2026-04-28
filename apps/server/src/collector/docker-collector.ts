@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { PassThrough } from "node:stream";
 import Docker from "dockerode";
 import type { ContainerInfo } from "dockerode";
 import type { LogEvent } from "@monitor-center/shared";
@@ -84,7 +85,20 @@ export class DockerCollector {
       });
 
       this.#activeStreams.set(containerId, stream);
-      stream.on("data", (chunk: Buffer) => {
+
+      const stdoutStream = new PassThrough();
+      const stderrStream = new PassThrough();
+
+      // Docker multiplexes stdout/stderr for non-TTY containers.
+      // Demux ensures we don't parse binary framing headers as part of log lines.
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
+      (this.#docker as unknown as { modem?: { demuxStream?: (s: unknown, out: unknown, err: unknown) => void } }).modem?.demuxStream?.(
+        stream,
+        stdoutStream,
+        stderrStream
+      );
+
+      const handleChunk = (streamType: "stdout" | "stderr", chunk: Buffer) => {
         const lines = chunk
           .toString("utf8")
           .split(/\r?\n/)
@@ -92,7 +106,6 @@ export class DockerCollector {
           .filter(Boolean);
 
         for (const line of lines) {
-          const streamType = line.toLowerCase().includes("stderr") ? "stderr" : "stdout";
           const log: LogEvent & { containerId: string; fingerprint: string } = {
             id: randomUUID(),
             timestamp: new Date().toISOString(),
@@ -113,7 +126,10 @@ export class DockerCollector {
           void insertLog(log);
           this.#hub.broadcastLog(log);
         }
-      });
+      };
+
+      stdoutStream.on("data", (chunk: Buffer) => handleChunk("stdout", chunk));
+      stderrStream.on("data", (chunk: Buffer) => handleChunk("stderr", chunk));
 
       stream.on("end", () => {
         this.#activeStreams.delete(containerId);
