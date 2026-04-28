@@ -11,9 +11,9 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   monitor-server:
-    image: node:22-alpine
-    working_dir: /app
-    command: sh -c "npm install && npm run build --workspace @monitor-center/shared && npm run dev --workspace @monitor-center/server"
+    build:
+      context: .
+      dockerfile: Dockerfile.server
     environment:
       PORT: 4000
       SESSION_SECRET: change-me-now
@@ -28,7 +28,6 @@ services:
     ports:
       - "4000:4000"
     volumes:
-      - .:/app
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - postgres
