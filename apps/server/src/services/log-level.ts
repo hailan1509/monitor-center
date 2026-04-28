@@ -35,8 +35,9 @@ export function inferLogLevel(message: string, stream: "stdout" | "stderr"): Log
   }
 
   if (stream === "stderr") {
-    // stderr doesn't always mean error (some containers write normal logs to stderr).
-    return "warn";
+    // stderr doesn't always mean error (many containers, including Postgres, emit normal logs on stderr).
+    // Keep it as info unless keywords/status codes match above.
+    return "info";
   }
 
   return "unknown";
