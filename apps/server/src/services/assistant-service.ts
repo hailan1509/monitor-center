@@ -34,33 +34,41 @@ export async function answerLogQuestion(input: {
     };
   }
 
-  const response = await client.responses.create({
-    model: env.OPENAI_MODEL,
-    input: [
-      {
-        role: "system",
-        content: [
-          {
-            type: "input_text",
-            text:
-              "You are an internal observability assistant. Answer using only the provided log context. If evidence is weak, say so. Highlight likely root causes, impacted service, and recommended next checks."
-          }
-        ]
-      },
-      {
-        role: "user",
-        content: [
-          {
-            type: "input_text",
-            text: `Question: ${input.question}\n\nContext logs:\n${JSON.stringify(summary, null, 2)}`
-          }
-        ]
-      }
-    ]
-  });
+  try {
+    const response = await client.responses.create({
+      model: env.OPENAI_MODEL,
+      input: [
+        {
+          role: "system",
+          content: [
+            {
+              type: "input_text",
+              text:
+                "You are an internal observability assistant. Answer using only the provided log context. If evidence is weak, say so. Highlight likely root causes, impacted service, and recommended next checks."
+            }
+          ]
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: `Question: ${input.question}\n\nContext logs:\n${JSON.stringify(summary, null, 2)}`
+            }
+          ]
+        }
+      ]
+    });
 
-  return {
-    answer: response.output_text,
-    context: summary
-  };
+    return {
+      answer: response.output_text,
+      context: summary
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return {
+      answer: `Không gọi được AI assistant lúc này. Lý do: ${message}`,
+      context: summary
+    };
+  }
 }

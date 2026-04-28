@@ -66,7 +66,13 @@ export function createApiRouter() {
       return;
     }
 
-    response.json(await answerLogQuestion(parsed.data));
+    try {
+      response.json(await answerLogQuestion(parsed.data));
+    } catch (error) {
+      response.status(500).json({
+        error: error instanceof Error ? error.message : "Assistant error"
+      });
+    }
   });
 
   router.get("/users", requireRole("admin"), async (_request, response) => {
