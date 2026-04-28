@@ -53,7 +53,7 @@ export class DockerCollector {
     await Promise.all(
       containers.map(async (containerInfo) => {
         const containerName = containerInfo.Names[0]?.replace(/^\//, "") ?? containerInfo.Id;
-        const mapping = resolveProject(containerName);
+        const mapping = resolveProject(containerName, containerInfo.Labels ?? {});
         await upsertContainerState({
           containerId: containerInfo.Id,
           containerName,
