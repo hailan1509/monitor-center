@@ -6,6 +6,15 @@ import { searchLogs } from "./log-repository.js";
 const openaiClient = env.OPENAI_API_KEY ? new OpenAI({ apiKey: env.OPENAI_API_KEY }) : null;
 const geminiClient = env.GEMINI_API_KEY ? new GoogleGenerativeAI(env.GEMINI_API_KEY) : null;
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_resolve, reject) => {
+      setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(timeoutMs / 1000)}s`)), timeoutMs);
+    })
+  ]);
+}
+
 function normalizeGeminiModelName(model: string) {
   // The models list API returns names like "models/gemini-2.5-flash".
   // The Node SDK expects just "gemini-2.5-flash" (without the "models/" prefix).
@@ -45,22 +54,26 @@ export async function answerLogQuestion(input: {
         systemInstruction: systemText
       });
 
-      const result = await model.generateContent({
-        contents: [
-          {
-            role: "user",
-            parts: [
-              {
-                text: `Question: ${input.question}\n\nContext logs:\n${contextText}`
-              }
-            ]
+      const result = await withTimeout(
+        model.generateContent({
+          contents: [
+            {
+              role: "user",
+              parts: [
+                {
+                  text: `Question: ${input.question}\n\nContext logs:\n${contextText}`
+                }
+              ]
+            }
+          ],
+          generationConfig: {
+            temperature: 0.2,
+            maxOutputTokens: env.GEMINI_MAX_OUTPUT_TOKENS
           }
-        ],
-        generationConfig: {
-          temperature: 0.2,
-          maxOutputTokens: env.GEMINI_MAX_OUTPUT_TOKENS
-        }
-      });
+        }),
+        45_000,
+        "Gemini"
+      );
 
       return {
         answer: result.response.text(),
@@ -84,29 +97,33 @@ export async function answerLogQuestion(input: {
   }
 
   try {
-    const response = await openaiClient.responses.create({
-      model: env.OPENAI_MODEL,
-      input: [
-        {
-          role: "system",
-          content: [
-            {
-              type: "input_text",
-              text: systemText
-            }
-          ]
-        },
-        {
-          role: "user",
-          content: [
-            {
-              type: "input_text",
-              text: `Question: ${input.question}\n\nContext logs:\n${contextText}`
-            }
-          ]
-        }
-      ]
-    });
+    const response = await withTimeout(
+      openaiClient.responses.create({
+        model: env.OPENAI_MODEL,
+        input: [
+          {
+            role: "system",
+            content: [
+              {
+                type: "input_text",
+                text: systemText
+              }
+            ]
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: `Question: ${input.question}\n\nContext logs:\n${contextText}`
+              }
+            ]
+          }
+        ]
+      }),
+      45_000,
+      "OpenAI"
+    );
 
     return {
       answer: response.output_text,
