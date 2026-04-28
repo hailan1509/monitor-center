@@ -21,7 +21,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash-latest}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-flash-latest}
       DOCKER_SOCKET_PATH: /var/run/docker.sock
       COOKIE_SECURE: "false"
     ports:

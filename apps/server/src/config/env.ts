@@ -10,7 +10,7 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_MODEL: z.string().default("gpt-4.1-mini"),
   GEMINI_API_KEY: z.string().optional(),
-  GEMINI_MODEL: z.string().default("gemini-1.5-flash-latest"),
+  GEMINI_MODEL: z.string().default("gemini-flash-latest"),
   DOCKER_SOCKET_PATH: z.string().default("/var/run/docker.sock"),
   COOKIE_SECURE: z
     .string()

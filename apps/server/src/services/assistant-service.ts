@@ -6,6 +6,12 @@ import { searchLogs } from "./log-repository.js";
 const openaiClient = env.OPENAI_API_KEY ? new OpenAI({ apiKey: env.OPENAI_API_KEY }) : null;
 const geminiClient = env.GEMINI_API_KEY ? new GoogleGenerativeAI(env.GEMINI_API_KEY) : null;
 
+function normalizeGeminiModelName(model: string) {
+  // The models list API returns names like "models/gemini-2.5-flash".
+  // The Node SDK expects just "gemini-2.5-flash" (without the "models/" prefix).
+  return model.replace(/^models\//, "");
+}
+
 export async function answerLogQuestion(input: {
   question: string;
   project?: string;
@@ -35,7 +41,7 @@ export async function answerLogQuestion(input: {
   if (geminiClient) {
     try {
       const model = geminiClient.getGenerativeModel({
-        model: env.GEMINI_MODEL,
+        model: normalizeGeminiModelName(env.GEMINI_MODEL),
         systemInstruction: systemText
       });
 
