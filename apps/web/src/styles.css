@@ -193,10 +193,6 @@ select {
   justify-content: center;
 }
 
-.sidebar-collapsed .menu-item-label {
-  display: none;
-}
-
 .sidebar-collapsed .sidebar-footer .user-pill {
   display: none;
 }
@@ -227,6 +223,10 @@ select {
   display: inline-flex;
   gap: 10px;
   align-items: center;
+}
+
+.sidebar-collapsed .menu-item-label {
+  display: none;
 }
 
 .menu-item:hover {
