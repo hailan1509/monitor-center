@@ -1,0 +1,152 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, Arial, sans-serif;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #020617;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.app-shell,
+.login-shell {
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.login-shell {
+  display: grid;
+  place-items: center;
+}
+
+.topbar,
+.panel-header,
+.filters,
+.user-form {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.grid {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.summary-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.two-col {
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+}
+
+.panel {
+  background: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.35);
+}
+
+.login-card {
+  width: min(420px, 100%);
+}
+
+label,
+.user-form {
+  display: grid;
+  gap: 8px;
+}
+
+input,
+textarea,
+select {
+  width: 100%;
+  background: #0f172a;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+button {
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  background: #38bdf8;
+  color: #082f49;
+  font-weight: 700;
+}
+
+.log-list,
+.issue-list {
+  display: grid;
+  gap: 10px;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.log-item,
+.issue-item,
+.metric-card {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.log-item {
+  display: grid;
+  gap: 4px;
+}
+
+.log-item p,
+.issue-item p,
+.assistant-answer,
+.panel p {
+  margin: 0;
+}
+
+.level-error,
+.level-fatal {
+  border-color: #dc2626;
+}
+
+.level-warn {
+  border-color: #f59e0b;
+}
+
+.assistant-answer {
+  white-space: pre-wrap;
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 12px;
+  padding: 12px;
+  margin-top: 12px;
+  min-height: 180px;
+}
+
+.error {
+  color: #fecaca;
+}
+
+.banner {
+  margin-top: 12px;
+}

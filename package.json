@@ -1,0 +1,19 @@
+{
+  "name": "monitor-center",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace @monitor-center/server\" \"npm run dev --workspace @monitor-center/web\"",
+    "build": "npm run build --workspace @monitor-center/shared && npm run build --workspace @monitor-center/server && npm run build --workspace @monitor-center/web",
+    "check": "npm run build",
+    "db:init": "npm run db:init --workspace @monitor-center/server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.8.3"
+  }
+}

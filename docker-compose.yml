@@ -1,0 +1,34 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: monitor_center
+      POSTGRES_USER: monitor_user
+      POSTGRES_PASSWORD: monitor_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  monitor-server:
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "npm install && npm run dev --workspace @monitor-center/server"
+    environment:
+      PORT: 4000
+      SESSION_SECRET: change-me-now
+      DATABASE_URL: postgresql://monitor_user:monitor_pass@postgres:5432/monitor_center
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
+      DOCKER_SOCKET_PATH: /var/run/docker.sock
+      COOKIE_SECURE: "false"
+    ports:
+      - "4000:4000"
+    volumes:
+      - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
