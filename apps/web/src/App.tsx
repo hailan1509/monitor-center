@@ -16,8 +16,38 @@ const emptySnapshot: DashboardSnapshot = {
   recentLogs: []
 };
 
+type NavKey = "overview" | "live" | "search" | "issues" | "assistant" | "containers" | "team";
+
+const navItems: Array<{ key: NavKey; label: string }> = [
+  { key: "overview", label: "Overview" },
+  { key: "live", label: "Live Tail" },
+  { key: "search", label: "Search" },
+  { key: "issues", label: "Issues" },
+  { key: "assistant", label: "AI Assistant" },
+  { key: "containers", label: "Containers" },
+  { key: "team", label: "Team" }
+];
+
+function formatShortTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) return value;
+  return date.toLocaleString();
+}
+
+function levelClass(level: string) {
+  const normalized = level.toLowerCase();
+  if (normalized === "fatal") return "badge badge-fatal";
+  if (normalized === "error") return "badge badge-error";
+  if (normalized === "warn") return "badge badge-warn";
+  if (normalized === "info") return "badge badge-info";
+  if (normalized === "debug") return "badge badge-muted";
+  if (normalized === "trace") return "badge badge-muted";
+  return "badge badge-muted";
+}
+
 export function App() {
   const [user, setUser] = useState<User | null>(null);
+  const [nav, setNav] = useState<NavKey>("overview");
   const [snapshot, setSnapshot] = useState<DashboardSnapshot>(emptySnapshot);
   const [liveLogs, setLiveLogs] = useState<LogEvent[]>([]);
   const [searchResults, setSearchResults] = useState<LogEvent[]>([]);
@@ -118,6 +148,12 @@ export function App() {
   }
 
   const topProject = useMemo(() => snapshot.projects[0]?.project ?? "No project yet", [snapshot.projects]);
+  const allProjects = useMemo(() => {
+    const set = new Set<string>();
+    for (const container of snapshot.containers) set.add(container.project);
+    for (const project of snapshot.projects) set.add(project.project);
+    return Array.from(set).sort();
+  }, [snapshot]);
 
   if (!user) {
     return (
@@ -147,152 +183,344 @@ export function App() {
   }
 
   return (
-    <main className="app-shell">
-      <header className="topbar">
-        <div>
-          <h1>Monitor Center</h1>
-          <p>{user.displayName} | {user.role} | Focus: {topProject}</p>
+    <main className="layout">
+      <aside className="sidebar">
+        <div className="brand">
+          <div className="brand-mark">MC</div>
+          <div className="brand-text">
+            <div className="brand-title">Monitor Center</div>
+            <div className="brand-subtitle">Logs & Observability</div>
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            void api.logout().then(() => setUser(null));
-          }}
-        >
-          Logout
-        </button>
-      </header>
 
-      {error ? <div className="error banner">{error}</div> : null}
-
-      <section className="grid summary-grid">
-        {snapshot.projects.map((project) => (
-          <article key={project.project} className="panel metric-card">
-            <h2>{project.project}</h2>
-            <p>{project.healthyContainers}/{project.containerCount} containers healthy</p>
-            <p>{project.errorCount24h} errors in 24h</p>
-            <p>{project.warnCount24h} warnings in 24h</p>
-          </article>
-        ))}
-      </section>
-
-      <section className="grid two-col">
-        <article className="panel">
-          <div className="panel-header">
-            <h2>Live Tail</h2>
-            <button type="button" onClick={() => void refreshDashboard()}>
-              Refresh snapshot
-            </button>
-          </div>
-          <div className="log-list">
-            {liveLogs.map((log) => (
-              <div key={`${log.id}-${log.timestamp}`} className={`log-item level-${log.level}`}>
-                <strong>{log.project}</strong>
-                <span>{log.containerName}</span>
-                <span>{log.level}</span>
-                <p>{log.message}</p>
-              </div>
+        <nav className="menu">
+          {navItems
+            .filter((item) => (item.key === "team" ? user.role === "admin" : true))
+            .map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                className={nav === item.key ? "menu-item active" : "menu-item"}
+                onClick={() => setNav(item.key)}
+              >
+                {item.label}
+              </button>
             ))}
-          </div>
-        </article>
+        </nav>
 
-        <article className="panel">
-          <h2>Search</h2>
-          <div className="filters">
-            <input value={searchProject} onChange={(event) => setSearchProject(event.target.value)} placeholder="project" />
-            <input value={searchText} onChange={(event) => setSearchText(event.target.value)} placeholder="keyword or error code" />
-            <button type="button" onClick={() => void handleSearch()}>
-              Search logs
-            </button>
+        <div className="sidebar-footer">
+          <div className="user-pill">
+            <div className="user-name">{user.displayName}</div>
+            <div className="user-meta">
+              <span className="badge badge-muted">{user.role}</span>
+              <span className="muted">{user.email}</span>
+            </div>
           </div>
-          <div className="log-list compact">
-            {searchResults.map((log) => (
-              <div key={log.id} className="log-item">
-                <strong>{log.timestamp}</strong>
-                <span>{log.project}</span>
-                <span>{log.level}</span>
-                <p>{log.message}</p>
-              </div>
-            ))}
-          </div>
-        </article>
-      </section>
-
-      <section className="grid two-col">
-        <article className="panel">
-          <h2>Issues</h2>
-          <div className="issue-list">
-            {snapshot.issues.map((issue) => (
-              <div key={issue.fingerprint} className="issue-item">
-                <strong>{issue.project}</strong>
-                <span>{issue.level}</span>
-                <span>{issue.count} hits</span>
-                <p>{issue.sampleMessage}</p>
-              </div>
-            ))}
-          </div>
-        </article>
-
-        <article className="panel">
-          <h2>AI Assistant</h2>
-          <textarea value={assistantQuestion} onChange={(event) => setAssistantQuestion(event.target.value)} rows={5} />
-          <button type="button" onClick={() => void handleAssistant()}>
-            Ask about logs
+          <button
+            type="button"
+            className="button button-ghost"
+            onClick={() => {
+              void api.logout().then(() => setUser(null));
+            }}
+          >
+            Logout
           </button>
-          <pre className="assistant-answer">{assistantAnswer}</pre>
-        </article>
-      </section>
+        </div>
+      </aside>
 
-      <section className="grid two-col">
-        <article className="panel">
-          <h2>Containers</h2>
-          <div className="issue-list">
-            {snapshot.containers.map((container) => (
-              <div key={container.containerId} className="issue-item">
-                <strong>{container.containerName}</strong>
-                <span>{container.project}</span>
-                <span>{container.state}</span>
-                <p>{container.image}</p>
-              </div>
-            ))}
+      <section className="content">
+        <header className="content-header">
+          <div>
+            <h1 className="page-title">{navItems.find((item) => item.key === nav)?.label}</h1>
+            <p className="page-subtitle">Focus: {topProject}</p>
           </div>
-        </article>
+          <div className="header-actions">
+            <button type="button" className="button" onClick={() => void refreshDashboard()}>
+              Refresh
+            </button>
+          </div>
+        </header>
 
-        {user.role === "admin" ? (
-          <article className="panel">
-            <h2>Team Access</h2>
-            <form
-              className="user-form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void handleCreateUser(new FormData(event.currentTarget));
-              }}
-            >
-              <input name="displayName" placeholder="Display name" required />
-              <input name="email" type="email" placeholder="Email" required />
-              <input name="password" type="password" placeholder="Password" required />
-              <select name="role" defaultValue="viewer">
-                <option value="viewer">viewer</option>
-                <option value="admin">admin</option>
-              </select>
-              <button type="submit">Create user</button>
-            </form>
-            <div className="issue-list compact">
-              {users.map((teamUser) => (
-                <div key={teamUser.id} className="issue-item">
-                  <strong>{teamUser.displayName}</strong>
-                  <span>{teamUser.role}</span>
-                  <p>{teamUser.email}</p>
+        {error ? <div className="callout callout-error">{error}</div> : null}
+
+        {nav === "overview" ? (
+          <>
+            <section className="grid cards">
+              {snapshot.projects.map((project) => (
+                <article key={project.project} className="card">
+                  <div className="card-title">{project.project}</div>
+                  <div className="card-metrics">
+                    <div className="metric">
+                      <div className="metric-label">Containers</div>
+                      <div className="metric-value">
+                        {project.healthyContainers}/{project.containerCount}
+                      </div>
+                    </div>
+                    <div className="metric">
+                      <div className="metric-label">Errors (24h)</div>
+                      <div className="metric-value metric-danger">{project.errorCount24h}</div>
+                    </div>
+                    <div className="metric">
+                      <div className="metric-label">Warnings (24h)</div>
+                      <div className="metric-value metric-warn">{project.warnCount24h}</div>
+                    </div>
+                  </div>
+                  <div className="muted small">Last log: {project.lastLogAt ? formatShortTime(project.lastLogAt) : "—"}</div>
+                </article>
+              ))}
+            </section>
+
+            <section className="grid two">
+              <article className="panel">
+                <div className="panel-head">
+                  <h2 className="panel-title">Recent logs</h2>
+                  <div className="muted small">Realtime via WebSocket</div>
+                </div>
+                <div className="table log-table">
+                  {liveLogs.slice(0, 80).map((log) => (
+                    <div key={`${log.id}-${log.timestamp}`} className="row">
+                      <div className="cell time">{formatShortTime(log.timestamp)}</div>
+                      <div className="cell project">{log.project}</div>
+                      <div className="cell container">{log.containerName}</div>
+                      <div className="cell level">
+                        <span className={levelClass(log.level)}>{log.level}</span>
+                      </div>
+                      <div className="cell message">{log.message}</div>
+                    </div>
+                  ))}
+                </div>
+              </article>
+
+              <article className="panel">
+                <div className="panel-head">
+                  <h2 className="panel-title">Top issues (24h)</h2>
+                  <div className="muted small">Grouped by fingerprint</div>
+                </div>
+                <div className="table issue-table">
+                  {snapshot.issues.map((issue) => (
+                    <div key={issue.fingerprint} className="row">
+                      <div className="cell project">{issue.project}</div>
+                      <div className="cell level">
+                        <span className={levelClass(issue.level)}>{issue.level}</span>
+                      </div>
+                      <div className="cell count">{issue.count}</div>
+                      <div className="cell message">{issue.sampleMessage}</div>
+                    </div>
+                  ))}
+                </div>
+              </article>
+            </section>
+          </>
+        ) : null}
+
+        {nav === "live" ? (
+          <section className="panel">
+            <div className="panel-head">
+              <h2 className="panel-title">Live Tail</h2>
+              <div className="filters">
+                <select value={searchProject} onChange={(event) => setSearchProject(event.target.value)}>
+                  <option value="">All projects</option>
+                  {allProjects.map((project) => (
+                    <option key={project} value={project}>
+                      {project}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="table log-table">
+              {liveLogs
+                .filter((log) => (searchProject ? log.project === searchProject : true))
+                .slice(0, 200)
+                .map((log) => (
+                  <div key={`${log.id}-${log.timestamp}`} className="row">
+                    <div className="cell time">{formatShortTime(log.timestamp)}</div>
+                    <div className="cell project">{log.project}</div>
+                    <div className="cell container">{log.containerName}</div>
+                    <div className="cell level">
+                      <span className={levelClass(log.level)}>{log.level}</span>
+                    </div>
+                    <div className="cell message">{log.message}</div>
+                  </div>
+                ))}
+            </div>
+          </section>
+        ) : null}
+
+        {nav === "search" ? (
+          <section className="panel">
+            <div className="panel-head">
+              <h2 className="panel-title">Search logs</h2>
+              <div className="filters">
+                <select value={searchProject} onChange={(event) => setSearchProject(event.target.value)}>
+                  <option value="">All projects</option>
+                  {allProjects.map((project) => (
+                    <option key={project} value={project}>
+                      {project}
+                    </option>
+                  ))}
+                </select>
+                <input value={searchText} onChange={(event) => setSearchText(event.target.value)} placeholder="keyword, error, status code..." />
+                <button type="button" className="button" onClick={() => void handleSearch()}>
+                  Search
+                </button>
+              </div>
+            </div>
+
+            <div className="table log-table">
+              {searchResults.map((log) => (
+                <div key={log.id} className="row">
+                  <div className="cell time">{formatShortTime(log.timestamp)}</div>
+                  <div className="cell project">{log.project}</div>
+                  <div className="cell container">{log.containerName}</div>
+                  <div className="cell level">
+                    <span className={levelClass(log.level)}>{log.level}</span>
+                  </div>
+                  <div className="cell message">{log.message}</div>
                 </div>
               ))}
             </div>
-          </article>
-        ) : (
-          <article className="panel">
-            <h2>Team Access</h2>
-            <p>Your role is viewer. Ask an admin to manage accounts.</p>
-          </article>
-        )}
+          </section>
+        ) : null}
+
+        {nav === "issues" ? (
+          <section className="panel">
+            <div className="panel-head">
+              <h2 className="panel-title">Issues</h2>
+              <div className="muted small">Most frequent fingerprints in the last 24h</div>
+            </div>
+            <div className="table issue-table">
+              {snapshot.issues.map((issue) => (
+                <div key={issue.fingerprint} className="row">
+                  <div className="cell project">{issue.project}</div>
+                  <div className="cell level">
+                    <span className={levelClass(issue.level)}>{issue.level}</span>
+                  </div>
+                  <div className="cell count">{issue.count}</div>
+                  <div className="cell time">{formatShortTime(issue.lastSeenAt)}</div>
+                  <div className="cell message">{issue.sampleMessage}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {nav === "assistant" ? (
+          <section className="panel">
+            <div className="panel-head">
+              <h2 className="panel-title">AI Assistant</h2>
+              <div className="filters">
+                <select value={searchProject} onChange={(event) => setSearchProject(event.target.value)}>
+                  <option value="">All projects</option>
+                  {allProjects.map((project) => (
+                    <option key={project} value={project}>
+                      {project}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="assistant-grid">
+              <div className="assistant-input">
+                <label className="field">
+                  <div className="field-label">Question</div>
+                  <textarea value={assistantQuestion} onChange={(event) => setAssistantQuestion(event.target.value)} rows={6} />
+                </label>
+                <button type="button" className="button" onClick={() => void handleAssistant()}>
+                  Ask
+                </button>
+                <div className="muted small">
+                  Tip: hỏi theo dạng “web nào lỗi 500 nhiều nhất?”, “container nào restart bất thường?”, “lỗi nào tăng đột biến trong 1h qua?”
+                </div>
+              </div>
+              <div className="assistant-output">
+                <div className="field-label">Answer</div>
+                <pre className="assistant-answer">{assistantAnswer || "—"}</pre>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        {nav === "containers" ? (
+          <section className="panel">
+            <div className="panel-head">
+              <h2 className="panel-title">Containers</h2>
+              <div className="muted small">Collected from Docker Engine</div>
+            </div>
+            <div className="table container-table">
+              {snapshot.containers.map((container) => (
+                <div key={container.containerId} className="row">
+                  <div className="cell project">{container.project}</div>
+                  <div className="cell container">{container.containerName}</div>
+                  <div className="cell level">
+                    <span className={container.state === "running" ? "badge badge-ok" : "badge badge-muted"}>{container.state}</span>
+                  </div>
+                  <div className="cell message">{container.image}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {nav === "team" && user.role === "admin" ? (
+          <section className="grid two">
+            <article className="panel">
+              <div className="panel-head">
+                <h2 className="panel-title">Create user</h2>
+                <div className="muted small">Admin only</div>
+              </div>
+              <form
+                className="form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handleCreateUser(new FormData(event.currentTarget));
+                }}
+              >
+                <label className="field">
+                  <div className="field-label">Display name</div>
+                  <input name="displayName" placeholder="Display name" required />
+                </label>
+                <label className="field">
+                  <div className="field-label">Email</div>
+                  <input name="email" type="email" placeholder="Email" required />
+                </label>
+                <label className="field">
+                  <div className="field-label">Password</div>
+                  <input name="password" type="password" placeholder="Password" required />
+                </label>
+                <label className="field">
+                  <div className="field-label">Role</div>
+                  <select name="role" defaultValue="viewer">
+                    <option value="viewer">viewer</option>
+                    <option value="admin">admin</option>
+                  </select>
+                </label>
+                <button type="submit" className="button">
+                  Create user
+                </button>
+              </form>
+            </article>
+
+            <article className="panel">
+              <div className="panel-head">
+                <h2 className="panel-title">Users</h2>
+                <div className="muted small">{users.length} accounts</div>
+              </div>
+              <div className="table user-table">
+                {users.map((teamUser) => (
+                  <div key={teamUser.id} className="row">
+                    <div className="cell project">{teamUser.displayName}</div>
+                    <div className="cell level">
+                      <span className="badge badge-muted">{teamUser.role}</span>
+                    </div>
+                    <div className="cell message">{teamUser.email}</div>
+                    <div className="cell time">{formatShortTime(teamUser.createdAt)}</div>
+                  </div>
+                ))}
+              </div>
+            </article>
+          </section>
+        ) : null}
       </section>
     </main>
   );
