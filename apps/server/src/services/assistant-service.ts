@@ -58,7 +58,7 @@ export async function answerLogQuestion(input: {
         ],
         generationConfig: {
           temperature: 0.2,
-          maxOutputTokens: 800
+          maxOutputTokens: env.GEMINI_MAX_OUTPUT_TOKENS
         }
       });
 
