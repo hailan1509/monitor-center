@@ -98,18 +98,60 @@ select {
 
 .menu {
   display: grid;
-  gap: 8px;
+  gap: 14px;
   padding: 8px;
 }
 
+.menu-section {
+  display: grid;
+  gap: 8px;
+}
+
+.menu-section-title {
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: rgba(226, 232, 240, 0.52);
+}
+
+.menu-section-items {
+  display: grid;
+  gap: 8px;
+}
+
 .menu-item {
+  position: relative;
   text-align: left;
   border: 1px solid transparent;
   border-radius: 14px;
-  padding: 10px 12px;
+  padding: 10px 12px 10px 12px;
   background: transparent;
   color: rgba(226, 232, 240, 0.92);
   cursor: pointer;
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.menu-item-icon {
+  width: 18px;
+  height: 18px;
+  color: rgba(226, 232, 240, 0.7);
+}
+
+.menu-item-icon svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+.menu-item-label {
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
 }
 
 .menu-item:hover {
@@ -120,6 +162,26 @@ select {
 .menu-item.active {
   background: rgba(56, 189, 248, 0.12);
   border-color: rgba(56, 189, 248, 0.28);
+}
+
+.menu-item.active .menu-item-icon {
+  color: rgba(186, 230, 253, 0.95);
+}
+
+.menu-item.active::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(56, 189, 248, 0.95), rgba(52, 211, 153, 0.85));
+}
+
+.menu-item:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.18);
 }
 
 .sidebar-footer {
@@ -178,6 +240,52 @@ select {
 .header-actions {
   display: flex;
   gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.header-select {
+  height: 40px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(2, 6, 23, 0.35);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.2px;
+}
+
+.status-pill-ok {
+  border-color: rgba(52, 211, 153, 0.24);
+  color: rgba(167, 243, 208, 0.95);
+}
+
+.status-pill-muted {
+  color: rgba(226, 232, 240, 0.7);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(226, 232, 240, 0.4);
+}
+
+.status-pill-ok .status-dot {
+  background: rgba(52, 211, 153, 0.95);
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.12);
+}
+
+.status-pill-muted .status-dot {
+  background: rgba(148, 163, 184, 0.65);
 }
 
 .grid {
@@ -224,6 +332,17 @@ select {
 .card {
   padding: 14px;
   background: var(--panel-2);
+}
+
+.card,
+.panel {
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.card:hover,
+.panel:hover {
+  transform: translateY(-1px);
+  border-color: rgba(56, 189, 248, 0.18);
 }
 
 .card-title {
@@ -298,6 +417,15 @@ select:focus {
 
 .button:hover {
   filter: brightness(1.03);
+}
+
+.button:active {
+  transform: translateY(0.5px);
+}
+
+.button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
 }
 
 .button-ghost {
@@ -476,8 +604,50 @@ select:focus {
 .login-shell {
   min-height: 100vh;
   display: grid;
+  grid-template-columns: minmax(320px, 520px) minmax(320px, 440px);
+  justify-content: center;
+  align-items: center;
+  gap: 22px;
+  padding: 28px 22px;
+}
+
+.login-hero {
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 24px;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.45);
+  box-shadow: var(--shadow);
+}
+
+.login-hero-mark {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  display: grid;
   place-items: center;
-  padding: 22px;
+  font-weight: 900;
+  font-size: 18px;
+  color: rgba(8, 47, 73, 0.95);
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.95), rgba(52, 211, 153, 0.85));
+  margin-bottom: 14px;
+}
+
+.login-hero-title {
+  font-weight: 950;
+  font-size: 30px;
+  letter-spacing: 0.2px;
+}
+
+.login-hero-subtitle {
+  margin-top: 10px;
+  color: rgba(226, 232, 240, 0.75);
+  line-height: 1.45;
+}
+
+.login-hero-footnote {
+  margin-top: 14px;
+  font-size: 12px;
+  color: rgba(226, 232, 240, 0.55);
 }
 
 .login-card {
@@ -489,14 +659,27 @@ select:focus {
   box-shadow: var(--shadow);
 }
 
-.login-card h1 {
+.login-card-head h1 {
   margin: 0;
   font-size: 20px;
 }
 
-.login-card p {
+.login-card-head p {
   margin: 8px 0 14px;
   color: var(--muted);
+}
+
+.login-show-password {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 8px 0 10px;
+  color: rgba(226, 232, 240, 0.78);
+  font-size: 13px;
+}
+
+.login-submit {
+  width: 100%;
 }
 
 .error {
@@ -512,6 +695,48 @@ select:focus {
   place-items: center;
   padding: 18px;
   z-index: 60;
+}
+
+.global-loading-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(2, 6, 23, 0.55);
+  backdrop-filter: blur(8px);
+  z-index: 80;
+}
+
+.global-loading-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(15, 23, 42, 0.85);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+}
+
+.global-loading-text {
+  font-weight: 800;
+  color: rgba(226, 232, 240, 0.9);
+  letter-spacing: 0.2px;
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 2px solid rgba(226, 232, 240, 0.22);
+  border-top-color: rgba(56, 189, 248, 0.95);
+  animation: spin 900ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .modal {
@@ -592,6 +817,36 @@ select:focus {
     grid-template-rows: auto auto auto;
     border-right: 0;
     border-bottom: 1px solid var(--border);
+  }
+
+  .menu {
+    display: flex;
+    gap: 10px;
+    overflow: auto;
+    padding: 8px;
+  }
+
+  .menu-section-title {
+    display: none;
+  }
+
+  .menu-section {
+    display: flex;
+    gap: 10px;
+  }
+
+  .menu-section-items {
+    display: flex;
+    gap: 10px;
+  }
+
+  .menu-item {
+    white-space: nowrap;
+    grid-template-columns: 18px auto;
+  }
+
+  .login-shell {
+    grid-template-columns: 1fr;
   }
 
   .assistant-grid {

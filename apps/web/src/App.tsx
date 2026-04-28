@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import type { ReactNode } from "react";
 import type { DashboardSnapshot, LogEvent, UserRole } from "@monitor-center/shared";
-import { api } from "./api";
+import { api, apiLoadingStore } from "./api";
 
 type User = {
   id: string;
@@ -26,6 +27,71 @@ const navItems: Array<{ key: NavKey; label: string }> = [
   { key: "assistant", label: "AI Assistant" },
   { key: "containers", label: "Containers" },
   { key: "team", label: "Team" }
+];
+
+const navIcons: Record<NavKey, ReactNode> = {
+  overview: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M4 13.5c0-.55.45-1 1-1h2c.55 0 1 .45 1 1V19c0 .55-.45 1-1 1H5c-.55 0-1-.45-1-1v-5.5Zm6-6c0-.55.45-1 1-1h2c.55 0 1 .45 1 1V19c0 .55-.45 1-1 1h-2c-.55 0-1-.45-1-1V7.5Zm6 3c0-.55.45-1 1-1h2c.55 0 1 .45 1 1V19c0 .55-.45 1-1 1h-2c-.55 0-1-.45-1-1v-8.5Z"
+      />
+    </svg>
+  ),
+  live: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M12 8a4 4 0 1 1 0 8a4 4 0 0 1 0-8Zm0-5a1 1 0 0 1 1 1v1.06A8.003 8.003 0 0 1 20.94 11H22a1 1 0 1 1 0 2h-1.06A8.003 8.003 0 0 1 13 20.94V22a1 1 0 1 1-2 0v-1.06A8.003 8.003 0 0 1 3.06 13H2a1 1 0 1 1 0-2h1.06A8.003 8.003 0 0 1 11 5.06V4a1 1 0 0 1 1-1Z"
+      />
+    </svg>
+  ),
+  search: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M10 4a6 6 0 1 1 0 12a6 6 0 0 1 0-12Zm8.7 13.3a1 1 0 0 1 0 1.4l-.01.01a1 1 0 0 1-1.4 0l-2.52-2.52a8 8 0 1 1 1.4-1.4l2.53 2.53Z"
+      />
+    </svg>
+  ),
+  issues: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M12 2a10 10 0 1 1 0 20a10 10 0 0 1 0-20Zm0 12a1.25 1.25 0 1 0 0 2.5A1.25 1.25 0 0 0 12 14Zm0-8a1 1 0 0 0-1 1v5a1 1 0 1 0 2 0V7a1 1 0 0 0-1-1Z"
+      />
+    </svg>
+  ),
+  assistant: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M12 2a7 7 0 0 1 7 7v3a5 5 0 0 1-5 5h-1.4l-2.3 2.3a1 1 0 0 1-1.7-.7V17H8a5 5 0 0 1-5-5V9a7 7 0 0 1 7-7h2Zm-2.25 9.5a1.25 1.25 0 1 0 0 2.5a1.25 1.25 0 0 0 0-2.5Zm4.5 0a1.25 1.25 0 1 0 0 2.5a1.25 1.25 0 0 0 0-2.5Z"
+      />
+    </svg>
+  ),
+  containers: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M3 7a2 2 0 0 1 1.2-1.84l7-3.11a2 2 0 0 1 1.6 0l7 3.11A2 2 0 0 1 21 7v10a2 2 0 0 1-1.2 1.84l-7 3.11a2 2 0 0 1-1.6 0l-7-3.11A2 2 0 0 1 3 17V7Zm2.5.66V17l6.5 2.89V10.6L5.5 7.66Zm8.5 12.23L20.5 17V7.66L14 10.6v9.29ZM12 3.9L6.58 6.3L12 8.83l5.42-2.53L12 3.9Z"
+      />
+    </svg>
+  ),
+  team: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M16 11a4 4 0 1 0-8 0a4 4 0 0 0 8 0Zm-13 9a7 7 0 0 1 14 0a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Zm15-9a3 3 0 0 0 0-6a1 1 0 1 0 0 2a1 1 0 1 1 0 2a1 1 0 1 0 0 2Zm3 9a1 1 0 0 1-1 1h-1.5a8.97 8.97 0 0 0-1.43-5.03A5 5 0 0 1 22 20Z"
+      />
+    </svg>
+  )
+};
+
+const navSections: Array<{ title: string; keys: NavKey[] }> = [
+  { title: "Observability", keys: ["overview", "live", "search", "issues", "containers"] },
+  { title: "Automation", keys: ["assistant"] },
+  { title: "Admin", keys: ["team"] }
 ];
 
 function formatShortTime(value: string) {
@@ -56,6 +122,7 @@ function matchesLevel(level: string, filter: LevelFilter) {
 export function App() {
   const [user, setUser] = useState<User | null>(null);
   const [nav, setNav] = useState<NavKey>("overview");
+  const [showPassword, setShowPassword] = useState(false);
   const [snapshot, setSnapshot] = useState<DashboardSnapshot>(emptySnapshot);
   const [liveLogs, setLiveLogs] = useState<LogEvent[]>([]);
   const [searchResults, setSearchResults] = useState<LogEvent[]>([]);
@@ -68,6 +135,10 @@ export function App() {
   const [users, setUsers] = useState<Array<User & { createdAt: string }>>([]);
   const [selectedLog, setSelectedLog] = useState<LogEvent | null>(null);
   const [selectedIssue, setSelectedIssue] = useState<DashboardSnapshot["issues"][number] | null>(null);
+  const [wsConnected, setWsConnected] = useState(false);
+
+  const pendingRequests = useSyncExternalStore(apiLoadingStore.subscribe, apiLoadingStore.getSnapshot, () => 0);
+  const showLoading = pendingRequests > 0;
 
   useEffect(() => {
     void api
@@ -86,6 +157,10 @@ export function App() {
     void refreshDashboard();
 
     const socket = new WebSocket(`${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/ws`);
+    setWsConnected(socket.readyState === WebSocket.OPEN);
+    socket.addEventListener("open", () => setWsConnected(true));
+    socket.addEventListener("close", () => setWsConnected(false));
+    socket.addEventListener("error", () => setWsConnected(false));
     socket.addEventListener("message", (event) => {
       const data = JSON.parse(event.data) as { type: string; payload: LogEvent };
       if (data.type === "log") {
@@ -176,6 +251,20 @@ export function App() {
   if (!user) {
     return (
       <main className="login-shell">
+        {showLoading ? (
+          <div className="global-loading-overlay" role="status" aria-live="polite" aria-label="Loading">
+            <div className="global-loading-card">
+              <div className="spinner" />
+              <div className="global-loading-text">Loading…</div>
+            </div>
+          </div>
+        ) : null}
+        <section className="login-hero" aria-hidden="true">
+          <div className="login-hero-mark">MC</div>
+          <div className="login-hero-title">Monitor Center</div>
+          <div className="login-hero-subtitle">Logs & Observability for Docker workloads</div>
+          <div className="login-hero-footnote">Secure access for your internal dashboard.</div>
+        </section>
         <form
           className="panel login-card"
           onSubmit={(event) => {
@@ -183,18 +272,32 @@ export function App() {
             void handleLogin(new FormData(event.currentTarget));
           }}
         >
-          <h1>Monitor Center</h1>
-          <p>Internal log observability for your Docker workloads.</p>
-          <label>
-            Email
-            <input name="email" type="email" defaultValue="admin@monitor.local" required />
+          <div className="login-card-head">
+            <h1>Sign in</h1>
+            <p>Use your admin account to access the dashboard.</p>
+          </div>
+          <label className="field">
+            <div className="field-label">Email</div>
+            <input name="email" type="email" autoComplete="username" placeholder="you@company.com" required />
           </label>
-          <label>
-            Password
-            <input name="password" type="password" defaultValue="admin123!" required />
+          <label className="field">
+            <div className="field-label">Password</div>
+            <input
+              name="password"
+              type={showPassword ? "text" : "password"}
+              autoComplete="current-password"
+              placeholder="Your password"
+              required
+            />
+          </label>
+          <label className="login-show-password">
+            <input type="checkbox" checked={showPassword} onChange={(event) => setShowPassword(event.target.checked)} />
+            Show password
           </label>
           {error ? <div className="error">{error}</div> : null}
-          <button type="submit">Login</button>
+          <button type="submit" className="button login-submit">
+            Login
+          </button>
         </form>
       </main>
     );
@@ -202,6 +305,14 @@ export function App() {
 
   return (
     <main className="layout">
+      {showLoading ? (
+        <div className="global-loading-overlay" role="status" aria-live="polite" aria-label="Loading">
+          <div className="global-loading-card">
+            <div className="spinner" />
+            <div className="global-loading-text">Loading…</div>
+          </div>
+        </div>
+      ) : null}
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-mark">MC</div>
@@ -212,18 +323,30 @@ export function App() {
         </div>
 
         <nav className="menu">
-          {navItems
-            .filter((item) => (item.key === "team" ? user.role === "admin" : true))
-            .map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                className={nav === item.key ? "menu-item active" : "menu-item"}
-                onClick={() => setNav(item.key)}
-              >
-                {item.label}
-              </button>
-            ))}
+          {navSections.map((section) => (
+            <div key={section.title} className="menu-section">
+              <div className="menu-section-title">{section.title}</div>
+              <div className="menu-section-items">
+                {section.keys
+                  .filter((key) => (key === "team" ? user.role === "admin" : true))
+                  .map((key) => {
+                    const item = navItems.find((candidate) => candidate.key === key);
+                    if (!item) return null;
+                    return (
+                      <button
+                        key={item.key}
+                        type="button"
+                        className={nav === item.key ? "menu-item active" : "menu-item"}
+                        onClick={() => setNav(item.key)}
+                      >
+                        <span className="menu-item-icon">{navIcons[item.key]}</span>
+                        <span className="menu-item-label">{item.label}</span>
+                      </button>
+                    );
+                  })}
+              </div>
+            </div>
+          ))}
         </nav>
 
         <div className="sidebar-footer">
@@ -253,6 +376,23 @@ export function App() {
             <p className="page-subtitle">Focus: {topProject}</p>
           </div>
           <div className="header-actions">
+            <div className={wsConnected ? "status-pill status-pill-ok" : "status-pill status-pill-muted"} title="WebSocket status">
+              <span className="status-dot" aria-hidden="true" />
+              {wsConnected ? "Realtime connected" : "Realtime offline"}
+            </div>
+            <select
+              aria-label="Project filter"
+              value={filterProject}
+              onChange={(event) => setFilterProject(event.target.value)}
+              className="header-select"
+            >
+              <option value="">All projects</option>
+              {allProjects.map((project) => (
+                <option key={project} value={project}>
+                  {project}
+                </option>
+              ))}
+            </select>
             <button type="button" className="button" onClick={() => void refreshDashboard()}>
               Refresh
             </button>
@@ -264,7 +404,7 @@ export function App() {
         {nav === "overview" ? (
           <>
             <section className="grid cards">
-              {snapshot.projects.map((project) => (
+              {snapshot.projects.map((project: DashboardSnapshot["projects"][number]) => (
                 <article key={project.project} className="card">
                   <div className="card-title">{project.project}</div>
                   <div className="card-metrics">
@@ -320,7 +460,7 @@ export function App() {
                   <div className="muted small">Grouped by fingerprint</div>
                 </div>
                 <div className="table issue-table">
-                  {snapshot.issues.map((issue) => (
+                  {snapshot.issues.map((issue: DashboardSnapshot["issues"][number]) => (
                     <button
                       key={issue.fingerprint}
                       type="button"
@@ -461,9 +601,9 @@ export function App() {
             </div>
             <div className="table issue-table">
               {snapshot.issues
-                .filter((issue) => (filterProject ? issue.project === filterProject : true))
-                .filter((issue) => matchesLevel(issue.level, filterLevel))
-                .map((issue) => (
+                .filter((issue: DashboardSnapshot["issues"][number]) => (filterProject ? issue.project === filterProject : true))
+                .filter((issue: DashboardSnapshot["issues"][number]) => matchesLevel(issue.level, filterLevel))
+                .map((issue: DashboardSnapshot["issues"][number]) => (
                 <button
                   key={issue.fingerprint}
                   type="button"
@@ -526,7 +666,7 @@ export function App() {
               <div className="muted small">Collected from Docker Engine</div>
             </div>
             <div className="table container-table">
-              {snapshot.containers.map((container) => (
+              {snapshot.containers.map((container: DashboardSnapshot["containers"][number]) => (
                 <div key={container.containerId} className="row">
                   <div className="cell project">{container.project}</div>
                   <div className="cell container">{container.containerName}</div>

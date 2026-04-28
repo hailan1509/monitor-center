@@ -7,22 +7,47 @@ type User = {
   role: UserRole;
 };
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {})
-    },
-    ...init
-  });
+let pendingRequests = 0;
+const loadingListeners = new Set<() => void>();
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: "Request failed" }));
-    throw new Error(error.error ?? "Request failed");
+function notifyLoadingListeners() {
+  for (const listener of loadingListeners) listener();
+}
+
+export const apiLoadingStore = {
+  subscribe(listener: () => void) {
+    loadingListeners.add(listener);
+    return () => loadingListeners.delete(listener);
+  },
+  getSnapshot() {
+    return pendingRequests;
   }
+};
 
-  return response.json() as Promise<T>;
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  pendingRequests += 1;
+  notifyLoadingListeners();
+
+  try {
+    const response = await fetch(path, {
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {})
+      },
+      ...init
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: "Request failed" }));
+      throw new Error(error.error ?? "Request failed");
+    }
+
+    return response.json() as Promise<T>;
+  } finally {
+    pendingRequests = Math.max(0, pendingRequests - 1);
+    notifyLoadingListeners();
+  }
 }
 
 export const api = {
