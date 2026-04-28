@@ -47,10 +47,11 @@ export const api = {
     me: () => request("/api/auth/me"),
     overview: () => request("/api/dashboard/overview"),
     searchLogs: (params) => request(`/api/logs/search?${new URLSearchParams(params).toString()}`),
-    askAssistant: (payload) => request("/api/assistant/query", {
+    startAssistantJob: (payload) => request("/api/assistant/query", {
         method: "POST",
         body: JSON.stringify(payload)
     }),
+    getAssistantJob: (jobId) => request(`/api/assistant/jobs/${encodeURIComponent(jobId)}`),
     users: () => request("/api/users"),
     createUser: (payload) => request("/api/users", {
         method: "POST",

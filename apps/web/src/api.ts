@@ -64,11 +64,19 @@ export const api = {
   overview: () => request<DashboardSnapshot>("/api/dashboard/overview"),
   searchLogs: (params: Record<string, string>) =>
     request<{ logs: LogEvent[] }>(`/api/logs/search?${new URLSearchParams(params).toString()}`),
-  askAssistant: (payload: AssistantRequest) =>
-    request<{ answer: string; context: Array<Record<string, unknown>> }>("/api/assistant/query", {
+  startAssistantJob: (payload: AssistantRequest) =>
+    request<{ jobId: string }>("/api/assistant/query", {
       method: "POST",
       body: JSON.stringify(payload)
     }),
+  getAssistantJob: (jobId: string) =>
+    request<{
+      id: string;
+      status: "queued" | "running" | "done" | "error";
+      progress?: string;
+      result?: { answer: string; context: Array<Record<string, unknown>> };
+      error?: string;
+    }>(`/api/assistant/jobs/${encodeURIComponent(jobId)}`),
   users: () => request<{ users: Array<User & { createdAt: string }> }>("/api/users"),
   createUser: (payload: { email: string; password: string; displayName: string; role: UserRole }) =>
     request<{ user: { id: string } }>("/api/users", {

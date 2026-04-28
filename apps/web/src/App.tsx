@@ -128,6 +128,7 @@ export function App() {
   const [liveLogs, setLiveLogs] = useState<LogEvent[]>([]);
   const [searchResults, setSearchResults] = useState<LogEvent[]>([]);
   const [assistantAnswer, setAssistantAnswer] = useState("");
+  const [assistantStatus, setAssistantStatus] = useState("");
   const [error, setError] = useState("");
   const [filterProject, setFilterProject] = useState("");
   const [filterLevel, setFilterLevel] = useState<LevelFilter>("");
@@ -219,13 +220,42 @@ export function App() {
 
   async function handleAssistant() {
     try {
-      const response = await api.askAssistant({
+      setError("");
+      setAssistantAnswer("");
+      setAssistantStatus("Queued");
+
+      const started = await api.startAssistantJob({
         question: assistantQuestion,
         ...(filterProject ? { project: filterProject } : {})
       });
-      setAssistantAnswer(response.answer);
+
+      const startedAt = Date.now();
+      const pollEveryMs = 900;
+      const hardTimeoutMs = 180_000;
+
+      while (true) {
+        const job = await api.getAssistantJob(started.jobId);
+        setAssistantStatus(job.progress ?? job.status);
+
+        if (job.status === "done" && job.result) {
+          setAssistantAnswer(job.result.answer);
+          setAssistantStatus("");
+          return;
+        }
+
+        if (job.status === "error") {
+          throw new Error(job.error ?? "Assistant failed");
+        }
+
+        if (Date.now() - startedAt > hardTimeoutMs) {
+          throw new Error("Assistant is taking too long. Please try again.");
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, pollEveryMs));
+      }
     } catch (assistantError) {
       setError(assistantError instanceof Error ? assistantError.message : "Assistant failed");
+      setAssistantStatus("");
     }
   }
 
@@ -678,6 +708,7 @@ export function App() {
               </div>
               <div className="assistant-output">
                 <div className="field-label">Answer</div>
+                {assistantStatus ? <div className="muted small">Status: {assistantStatus}</div> : null}
                 <pre className="assistant-answer">{assistantAnswer || "—"}</pre>
               </div>
             </div>

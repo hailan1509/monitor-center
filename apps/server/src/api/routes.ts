@@ -4,7 +4,7 @@ import { assistantRequestSchema, searchQuerySchema, userRoleSchema } from "@moni
 import { createUser, listUsers, verifyUser } from "../auth/auth-service.js";
 import { requireAuth, requireRole } from "../auth/middleware.js";
 import { getOverview, searchLogs } from "../services/log-repository.js";
-import { answerLogQuestion } from "../services/assistant-service.js";
+import { createAssistantJob, getAssistantJob } from "../services/assistant-jobs.js";
 
 export function createApiRouter() {
   const router = Router();
@@ -66,13 +66,24 @@ export function createApiRouter() {
       return;
     }
 
-    try {
-      response.json(await answerLogQuestion(parsed.data));
-    } catch (error) {
-      response.status(500).json({
-        error: error instanceof Error ? error.message : "Assistant error"
-      });
+    const job = createAssistantJob(parsed.data);
+    response.status(202).json({ jobId: job.id });
+  });
+
+  router.get("/assistant/jobs/:id", requireAuth, (request, response) => {
+    const job = getAssistantJob(String(request.params.id));
+    if (!job) {
+      response.status(404).json({ error: "Job not found" });
+      return;
     }
+
+    response.json({
+      id: job.id,
+      status: job.status,
+      progress: job.progress,
+      result: job.result,
+      error: job.error
+    });
   });
 
   router.get("/users", requireRole("admin"), async (_request, response) => {

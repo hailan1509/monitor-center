@@ -31,10 +31,10 @@ export async function answerLogQuestion(input: {
     project: input.project,
     start: input.start,
     end: input.end,
-    limit: 120
+    limit: 80
   });
 
-  const summary = logs.slice(0, 120).map((log) => ({
+  const summary = logs.slice(0, 80).map((log) => ({
     timestamp: log.timestamp,
     project: log.project,
     service: log.service,
@@ -71,7 +71,7 @@ export async function answerLogQuestion(input: {
             maxOutputTokens: env.GEMINI_MAX_OUTPUT_TOKENS
           }
         }),
-        45_000,
+        env.AI_TIMEOUT_MS,
         "Gemini"
       );
 
@@ -121,7 +121,7 @@ export async function answerLogQuestion(input: {
           }
         ]
       }),
-      45_000,
+      env.AI_TIMEOUT_MS,
       "OpenAI"
     );
 

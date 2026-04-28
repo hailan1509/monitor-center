@@ -12,6 +12,7 @@ const envSchema = z.object({
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().default("gemini-flash-latest"),
   GEMINI_MAX_OUTPUT_TOKENS: z.coerce.number().min(64).max(8192).default(2048),
+  AI_TIMEOUT_MS: z.coerce.number().min(5_000).max(300_000).default(120_000),
   DOCKER_SOCKET_PATH: z.string().default("/var/run/docker.sock"),
   COOKIE_SECURE: z
     .string()
