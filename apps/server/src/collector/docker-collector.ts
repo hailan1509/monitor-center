@@ -11,6 +11,19 @@ import { inferLogLevel, normalizeMessage } from "../services/log-level.js";
 import { classifySecurityEvent, parseNginxAccessLog } from "../services/access-log.js";
 import type { RealtimeHub } from "../services/ws-hub.js";
 
+function inferPostgresSeverity(message: string) {
+  // Postgres log lines often include "LOG:", "WARNING:", "ERROR:", etc.
+  const match = message.match(/\b(LOG|INFO|NOTICE|WARNING|ERROR|FATAL|PANIC):\b/i);
+  if (!match) return null;
+
+  const token = match[1].toUpperCase();
+  if (token === "FATAL" || token === "PANIC") return "fatal";
+  if (token === "ERROR") return "error";
+  if (token === "WARNING") return "warn";
+  // LOG/INFO/NOTICE are normal operation.
+  return "info";
+}
+
 type CollectorDependencies = {
   hub: RealtimeHub;
 };
@@ -127,6 +140,10 @@ export class DockerCollector {
           });
 
           const category = isSecurity ? "security" : "system";
+          const baseLevel = inferLogLevel(line, streamType);
+          const postgresLevel = service === "postgres" ? inferPostgresSeverity(line) : null;
+          const level = postgresLevel ?? baseLevel;
+
           const log: LogEvent & { containerId: string; fingerprint: string } = {
             id: randomUUID(),
             timestamp: new Date().toISOString(),
@@ -134,7 +151,7 @@ export class DockerCollector {
             service,
             containerName,
             stream: streamType,
-            level: inferLogLevel(line, streamType),
+            level,
             message: line,
             raw: line,
             source: "docker",
