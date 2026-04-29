@@ -53,6 +53,10 @@ export const api = {
     overview: () => request("/api/dashboard/overview"),
     securitySummary: () => request("/api/security/summary"),
     searchLogs: (params) => request(`/api/logs/search?${new URLSearchParams(params).toString()}`),
+    purgeLogs: (payload) => request("/api/logs/purge", {
+        method: "POST",
+        body: JSON.stringify(payload)
+    }),
     startAssistantJob: (payload) => request("/api/assistant/query", {
         method: "POST",
         body: JSON.stringify(payload)
