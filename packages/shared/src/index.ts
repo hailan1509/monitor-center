@@ -76,6 +76,22 @@ export const assistantRequestSchema = z.object({
   end: z.string().optional()
 });
 
+export const logPurgeRequestSchema = z
+  .object({
+    project: z.string().optional(),
+    service: z.string().optional(),
+    containerName: z.string().optional(),
+    level: logLevelSchema.optional(),
+    category: z.enum(["security", "system"]).optional(),
+    start: z.string().optional(),
+    end: z.string().optional(),
+    before: z.string().optional(),
+    dryRun: z.boolean().default(true)
+  })
+  .refine((value) => Boolean(value.before || value.start || value.end), {
+    message: "Provide at least one time constraint: before, start, or end."
+  });
+
 export type UserRole = z.infer<typeof userRoleSchema>;
 export type LogLevel = z.infer<typeof logLevelSchema>;
 export type LogEvent = z.infer<typeof logEventSchema>;
@@ -85,6 +101,7 @@ export type ProjectSummary = z.infer<typeof projectSummarySchema>;
 export type DashboardSnapshot = z.infer<typeof dashboardSnapshotSchema>;
 export type SearchQuery = z.infer<typeof searchQuerySchema>;
 export type AssistantRequest = z.infer<typeof assistantRequestSchema>;
+export type LogPurgeRequest = z.infer<typeof logPurgeRequestSchema>;
 
 export const DEFAULT_PROJECT_MAPPINGS = [
   {

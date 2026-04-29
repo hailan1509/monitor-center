@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
-import { assistantRequestSchema, searchQuerySchema, userRoleSchema } from "@monitor-center/shared";
+import { assistantRequestSchema, logPurgeRequestSchema, searchQuerySchema, userRoleSchema } from "@monitor-center/shared";
 import { createUser, listUsers, verifyUser } from "../auth/auth-service.js";
 import { requireAuth, requireRole } from "../auth/middleware.js";
-import { getOverview, getSecuritySummary, searchLogs } from "../services/log-repository.js";
+import { getOverview, getSecuritySummary, purgeLogs, searchLogs } from "../services/log-repository.js";
 import { createAssistantJob, getAssistantJob } from "../services/assistant-jobs.js";
 import { rateLimit } from "../services/rate-limit.js";
 
@@ -71,6 +71,21 @@ export function createApiRouter() {
     }
 
     response.json({ logs: await searchLogs(parsed.data) });
+  });
+
+  router.post("/logs/purge", requireRole("admin"), async (request, response) => {
+    const parsed = logPurgeRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ error: parsed.error.flatten() });
+      return;
+    }
+
+    const result = await purgeLogs({
+      ...parsed.data,
+      dryRun: parsed.data.dryRun ?? true
+    });
+
+    response.json(result);
   });
 
   router.post("/assistant/query", requireAuth, async (request, response) => {

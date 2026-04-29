@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
-import type { DashboardSnapshot, LogEvent, UserRole } from "@monitor-center/shared";
+import type { DashboardSnapshot, LogEvent, LogPurgeRequest, UserRole } from "@monitor-center/shared";
 import { api, apiLoadingStore } from "./api";
 
 type User = {
@@ -153,6 +153,8 @@ export function App() {
     topPaths: Array<{ path: string; count: number }>;
     topUserAgents: Array<{ userAgent: string; count: number }>;
   } | null>(null);
+  const [purgePreview, setPurgePreview] = useState<number | null>(null);
+  const [purgeStatus, setPurgeStatus] = useState<string>("");
 
   const pendingRequests = useSyncExternalStore(apiLoadingStore.subscribe, apiLoadingStore.getSnapshot, () => 0);
   const showLoading = pendingRequests > 0;
@@ -288,6 +290,44 @@ export function App() {
       setUsers(response.users);
     } catch (createUserError) {
       setError(createUserError instanceof Error ? createUserError.message : "Unable to create user");
+    }
+  }
+
+  async function handlePurgeLogs(formData: FormData) {
+    try {
+      setError("");
+      setPurgeStatus("");
+
+      const payload: LogPurgeRequest = {
+        project: String(formData.get("project") ?? "") || undefined,
+        category: (String(formData.get("category") ?? "") as "security" | "system") || undefined,
+        level: (String(formData.get("level") ?? "") as any) || undefined,
+        before: String(formData.get("before") ?? "") || undefined,
+        start: String(formData.get("start") ?? "") || undefined,
+        end: String(formData.get("end") ?? "") || undefined,
+        dryRun: true
+      };
+
+      const preview = await api.purgeLogs(payload);
+      setPurgePreview(preview.affected);
+
+      if (preview.affected === 0) {
+        setPurgeStatus("No logs match the purge filters.");
+        return;
+      }
+
+      const confirmed = window.confirm(`This will delete ${preview.affected} log rows. Continue?`);
+      if (!confirmed) {
+        setPurgeStatus("Cancelled.");
+        return;
+      }
+
+      const result = await api.purgeLogs({ ...payload, dryRun: false });
+      setPurgeStatus(`Deleted ${result.affected} logs.`);
+      setPurgePreview(null);
+      void refreshDashboard();
+    } catch (purgeError) {
+      setError(purgeError instanceof Error ? purgeError.message : "Unable to purge logs");
     }
   }
 
@@ -874,6 +914,63 @@ export function App() {
                   </div>
                 ))}
               </div>
+            </article>
+
+            <article className="panel">
+              <div className="panel-head">
+                <h2 className="panel-title">Log cleanup</h2>
+                <div className="muted small">Admin only (deletes rows in DB)</div>
+              </div>
+              <form
+                className="form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handlePurgeLogs(new FormData(event.currentTarget));
+                }}
+              >
+                <div className="filters">
+                  <select name="project" defaultValue="">
+                    <option value="">All projects</option>
+                    {allProjects.map((project) => (
+                      <option key={project} value={project}>
+                        {project}
+                      </option>
+                    ))}
+                  </select>
+                  <select name="category" defaultValue="">
+                    <option value="">All categories</option>
+                    <option value="system">system</option>
+                    <option value="security">security</option>
+                  </select>
+                  <select name="level" defaultValue="">
+                    <option value="">All levels</option>
+                    {levelOptions
+                      .filter((value) => value)
+                      .map((level) => (
+                        <option key={level} value={level}>
+                          {level}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <div className="filters">
+                  <input
+                    name="before"
+                    placeholder="before (ISO), e.g. 2026-04-29T00:00:00Z"
+                    inputMode="text"
+                    aria-label="Before timestamp"
+                  />
+                  <input name="start" placeholder="start (ISO)" inputMode="text" aria-label="Start timestamp" />
+                  <input name="end" placeholder="end (ISO)" inputMode="text" aria-label="End timestamp" />
+                </div>
+
+                <button type="submit" className="button">
+                  Preview & Delete
+                </button>
+                {purgePreview !== null ? <div className="muted small">Preview: {purgePreview} rows match.</div> : null}
+                {purgeStatus ? <div className="muted small">{purgeStatus}</div> : null}
+              </form>
             </article>
           </section>
         ) : null}

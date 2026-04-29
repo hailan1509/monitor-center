@@ -13,6 +13,18 @@ type SearchFilters = {
   limit?: number;
 };
 
+type PurgeFilters = {
+  project?: string;
+  service?: string;
+  containerName?: string;
+  level?: string;
+  category?: "security" | "system";
+  start?: string;
+  end?: string;
+  before?: string;
+  dryRun: boolean;
+};
+
 export async function ensureLogPartition(timestamp: string) {
   await pool.query(partitionSql(new Date(timestamp)));
 }
@@ -377,4 +389,71 @@ export async function getSecuritySummary() {
     topPaths: pathResult.rows.map((row) => ({ path: row.path, count: Number(row.count) })),
     topUserAgents: uaResult.rows.map((row) => ({ userAgent: row.user_agent, count: Number(row.count) }))
   };
+}
+
+export async function purgeLogs(filters: PurgeFilters) {
+  const clauses: string[] = [];
+  const values: unknown[] = [];
+
+  if (filters.project) {
+    values.push(filters.project);
+    clauses.push(`project = $${values.length}`);
+  }
+  if (filters.service) {
+    values.push(filters.service);
+    clauses.push(`service = $${values.length}`);
+  }
+  if (filters.containerName) {
+    values.push(filters.containerName);
+    clauses.push(`container_name = $${values.length}`);
+  }
+  if (filters.level) {
+    values.push(filters.level);
+    clauses.push(`level = $${values.length}`);
+  }
+  if (filters.category) {
+    values.push(filters.category);
+    clauses.push(`(metadata->>'category') = $${values.length}`);
+  }
+  if (filters.start) {
+    values.push(filters.start);
+    clauses.push(`timestamp >= $${values.length}`);
+  }
+  if (filters.end) {
+    values.push(filters.end);
+    clauses.push(`timestamp <= $${values.length}`);
+  }
+  if (filters.before) {
+    values.push(filters.before);
+    clauses.push(`timestamp < $${values.length}`);
+  }
+
+  const whereClause = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+
+  if (filters.dryRun) {
+    const result = await query<{ count: string }>(
+      `
+      SELECT COUNT(*)::int AS count
+      FROM logs
+      ${whereClause}
+      `,
+      values
+    );
+
+    return { dryRun: true, affected: Number(result.rows[0]?.count ?? 0) };
+  }
+
+  const result = await query<{ count: string }>(
+    `
+    WITH deleted AS (
+      DELETE FROM logs
+      ${whereClause}
+      RETURNING 1
+    )
+    SELECT COUNT(*)::int AS count FROM deleted
+    `,
+    values
+  );
+
+  return { dryRun: false, affected: Number(result.rows[0]?.count ?? 0) };
 }

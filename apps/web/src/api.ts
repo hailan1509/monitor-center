@@ -1,4 +1,4 @@
-import type { AssistantRequest, DashboardSnapshot, LogEvent, UserRole } from "@monitor-center/shared";
+import type { AssistantRequest, DashboardSnapshot, LogEvent, LogPurgeRequest, UserRole } from "@monitor-center/shared";
 
 type User = {
   id: string;
@@ -80,6 +80,11 @@ export const api = {
     }>("/api/security/summary"),
   searchLogs: (params: Record<string, string>) =>
     request<{ logs: LogEvent[] }>(`/api/logs/search?${new URLSearchParams(params).toString()}`),
+  purgeLogs: (payload: LogPurgeRequest) =>
+    request<{ dryRun: boolean; affected: number }>("/api/logs/purge", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
   startAssistantJob: (payload: AssistantRequest) =>
     request<{ jobId: string }>("/api/assistant/query", {
       method: "POST",
