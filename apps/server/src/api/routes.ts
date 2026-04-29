@@ -5,6 +5,7 @@ import { createUser, listUsers, verifyUser } from "../auth/auth-service.js";
 import { requireAuth, requireRole } from "../auth/middleware.js";
 import { getOverview, getSecuritySummary, searchLogs } from "../services/log-repository.js";
 import { createAssistantJob, getAssistantJob } from "../services/assistant-jobs.js";
+import { rateLimit } from "../services/rate-limit.js";
 
 export function createApiRouter() {
   const router = Router();
@@ -13,7 +14,15 @@ export function createApiRouter() {
     response.json({ ok: true });
   });
 
-  router.post("/auth/login", async (request, response) => {
+  // Brute-force protection: limit login attempts per IP.
+  router.post(
+    "/auth/login",
+    rateLimit({
+      windowMs: 5 * 60 * 1000,
+      max: 12,
+      keyPrefix: "login"
+    }),
+    async (request, response) => {
     const schema = z.object({
       email: z.string().email(),
       password: z.string().min(6)
@@ -33,7 +42,8 @@ export function createApiRouter() {
 
     request.session.user = user;
     response.json({ user });
-  });
+    }
+  );
 
   router.post("/auth/logout", requireAuth, (request, response) => {
     request.session.destroy(() => {
