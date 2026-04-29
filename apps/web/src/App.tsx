@@ -17,13 +17,14 @@ const emptySnapshot: DashboardSnapshot = {
   recentLogs: []
 };
 
-type NavKey = "overview" | "live" | "search" | "issues" | "assistant" | "containers" | "team";
+type NavKey = "overview" | "live" | "search" | "issues" | "security" | "assistant" | "containers" | "team";
 
 const navItems: Array<{ key: NavKey; label: string }> = [
   { key: "overview", label: "Overview" },
   { key: "live", label: "Live Tail" },
   { key: "search", label: "Search" },
   { key: "issues", label: "Issues" },
+  { key: "security", label: "Security" },
   { key: "assistant", label: "AI Assistant" },
   { key: "containers", label: "Containers" },
   { key: "team", label: "Team" }
@@ -62,6 +63,14 @@ const navIcons: Record<NavKey, ReactNode> = {
       />
     </svg>
   ),
+  security: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M12 2l7 4v6c0 5-3 9-7 10c-4-1-7-5-7-10V6l7-4Zm0 2.3L7 6.7V12c0 4 2.2 7.2 5 8c2.8-.8 5-4 5-8V6.7l-5-2.4Zm0 4.2a1 1 0 0 1 1 1v3.4l1.3 1.3a1 1 0 1 1-1.4 1.4l-1.6-1.6a1 1 0 0 1-.3-.7V9.5a1 1 0 0 1 1-1Z"
+      />
+    </svg>
+  ),
   assistant: (
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path
@@ -89,7 +98,7 @@ const navIcons: Record<NavKey, ReactNode> = {
 };
 
 const navSections: Array<{ title: string; keys: NavKey[] }> = [
-  { title: "Observability", keys: ["overview", "live", "search", "issues", "containers"] },
+  { title: "Observability", keys: ["overview", "live", "search", "issues", "security", "containers"] },
   { title: "Automation", keys: ["assistant"] },
   { title: "Admin", keys: ["team"] }
 ];
@@ -138,6 +147,12 @@ export function App() {
   const [selectedLog, setSelectedLog] = useState<LogEvent | null>(null);
   const [selectedIssue, setSelectedIssue] = useState<DashboardSnapshot["issues"][number] | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
+  const [securitySummary, setSecuritySummary] = useState<{
+    total24h: number;
+    topIps: Array<{ clientIp: string; count: number }>;
+    topPaths: Array<{ path: string; count: number }>;
+    topUserAgents: Array<{ userAgent: string; count: number }>;
+  } | null>(null);
 
   const pendingRequests = useSyncExternalStore(apiLoadingStore.subscribe, apiLoadingStore.getSnapshot, () => 0);
   const showLoading = pendingRequests > 0;
@@ -166,6 +181,7 @@ export function App() {
     }
 
     void refreshDashboard();
+    void api.securitySummary().then(setSecuritySummary).catch(() => undefined);
 
     const socket = new WebSocket(`${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/ws`);
     setWsConnected(socket.readyState === WebSocket.OPEN);
@@ -190,6 +206,7 @@ export function App() {
     const overview = await api.overview();
     setSnapshot(overview);
     setLiveLogs(overview.recentLogs);
+    void api.securitySummary().then(setSecuritySummary).catch(() => undefined);
   }
 
   async function handleLogin(formData: FormData) {
@@ -675,6 +692,71 @@ export function App() {
                 </button>
               ))}
             </div>
+          </section>
+        ) : null}
+
+        {nav === "security" ? (
+          <section className="grid two">
+            <article className="panel">
+              <div className="panel-head">
+                <h2 className="panel-title">Security events (24h)</h2>
+                <div className="muted small">Noise reduction: scanners, probes, auth failures</div>
+              </div>
+              <div className="card-metrics">
+                <div className="metric">
+                  <div className="metric-label">Total events</div>
+                  <div className="metric-value">{securitySummary?.total24h ?? "—"}</div>
+                </div>
+              </div>
+              <div className="muted small">
+                Tip: Chặn ở Nginx Proxy Manager (block `/xmlrpc.php`, `/.env`, `/.git`) + rate-limit `/api/auth/login`.
+              </div>
+            </article>
+
+            <article className="panel">
+              <div className="panel-head">
+                <h2 className="panel-title">Top IPs</h2>
+                <div className="muted small">Last 24h</div>
+              </div>
+              <div className="table">
+                {(securitySummary?.topIps ?? []).map((row) => (
+                  <div key={row.clientIp} className="row">
+                    <div className="cell project">{row.clientIp}</div>
+                    <div className="cell count">{row.count}</div>
+                  </div>
+                ))}
+              </div>
+            </article>
+
+            <article className="panel">
+              <div className="panel-head">
+                <h2 className="panel-title">Top paths</h2>
+                <div className="muted small">Last 24h</div>
+              </div>
+              <div className="table">
+                {(securitySummary?.topPaths ?? []).map((row) => (
+                  <div key={row.path} className="row">
+                    <div className="cell message">{row.path}</div>
+                    <div className="cell count">{row.count}</div>
+                  </div>
+                ))}
+              </div>
+            </article>
+
+            <article className="panel">
+              <div className="panel-head">
+                <h2 className="panel-title">Top user agents</h2>
+                <div className="muted small">Last 24h</div>
+              </div>
+              <div className="table">
+                {(securitySummary?.topUserAgents ?? []).map((row) => (
+                  <div key={row.userAgent} className="row">
+                    <div className="cell message">{row.userAgent}</div>
+                    <div className="cell count">{row.count}</div>
+                  </div>
+                ))}
+              </div>
+            </article>
           </section>
         ) : null}
 

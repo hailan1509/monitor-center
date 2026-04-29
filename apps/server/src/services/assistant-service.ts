@@ -21,6 +21,21 @@ function normalizeGeminiModelName(model: string) {
   return model.replace(/^models\//, "");
 }
 
+function isSecurityNoise(log: { metadata?: Record<string, unknown>; message: string; project: string; service: string }) {
+  const category = typeof log.metadata?.category === "string" ? log.metadata.category : undefined;
+  if (category === "security") return true;
+
+  // Postgres checkpoints are normal maintenance; treat as noise for system-error analysis.
+  if (log.service === "postgres" || log.project === "infra") {
+    const msg = log.message.toLowerCase();
+    if (msg.includes("checkpoint") || msg.includes("autovacuum") || msg.includes("database system is ready")) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export async function answerLogQuestion(input: {
   question: string;
   project?: string;
@@ -34,7 +49,8 @@ export async function answerLogQuestion(input: {
     limit: 80
   });
 
-  const summary = logs.slice(0, 80).map((log) => ({
+  const filtered = logs.filter((log) => !isSecurityNoise(log));
+  const summary = filtered.slice(0, 80).map((log) => ({
     timestamp: log.timestamp,
     project: log.project,
     service: log.service,

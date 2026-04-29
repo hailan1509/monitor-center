@@ -71,6 +71,13 @@ export const api = {
     }),
   me: () => request<{ user: User | null }>("/api/auth/me"),
   overview: () => request<DashboardSnapshot>("/api/dashboard/overview"),
+  securitySummary: () =>
+    request<{
+      total24h: number;
+      topIps: Array<{ clientIp: string; count: number }>;
+      topPaths: Array<{ path: string; count: number }>;
+      topUserAgents: Array<{ userAgent: string; count: number }>;
+    }>("/api/security/summary"),
   searchLogs: (params: Record<string, string>) =>
     request<{ logs: LogEvent[] }>(`/api/logs/search?${new URLSearchParams(params).toString()}`),
   startAssistantJob: (payload: AssistantRequest) =>

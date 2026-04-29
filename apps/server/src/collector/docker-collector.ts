@@ -8,6 +8,7 @@ import { resolveProject } from "../config/project-mappings.js";
 import { insertLog, upsertContainerState } from "../services/log-repository.js";
 import { buildFingerprint } from "../services/fingerprint.js";
 import { inferLogLevel, normalizeMessage } from "../services/log-level.js";
+import { classifySecurityEvent, parseNginxAccessLog } from "../services/access-log.js";
 import type { RealtimeHub } from "../services/ws-hub.js";
 
 type CollectorDependencies = {
@@ -106,6 +107,26 @@ export class DockerCollector {
           .filter(Boolean);
 
         for (const line of lines) {
+          const parsedAccess = parseNginxAccessLog(line);
+          const accessMetadata: Record<string, string | number | boolean | null> = {};
+          if (parsedAccess) {
+            accessMetadata.clientIp = parsedAccess.clientIp;
+            accessMetadata.httpMethod = parsedAccess.method;
+            accessMetadata.httpPath = parsedAccess.path;
+            accessMetadata.httpStatus = parsedAccess.status;
+            accessMetadata.httpBytes = parsedAccess.bytes ?? null;
+            accessMetadata.httpReferer = parsedAccess.referer ?? null;
+            accessMetadata.httpUserAgent = parsedAccess.userAgent ?? null;
+          }
+
+          const isSecurity = classifySecurityEvent({
+            path: parsedAccess?.path,
+            status: parsedAccess?.status,
+            userAgent: parsedAccess?.userAgent,
+            message: line
+          });
+
+          const category = isSecurity ? "security" : "system";
           const log: LogEvent & { containerId: string; fingerprint: string } = {
             id: randomUUID(),
             timestamp: new Date().toISOString(),
@@ -117,8 +138,11 @@ export class DockerCollector {
             message: line,
             raw: line,
             source: "docker",
-            tags: [project, service, containerName],
-            metadata: {},
+            tags: [project, service, containerName, `category:${category}`],
+            metadata: {
+              category,
+              ...accessMetadata
+            },
             containerId,
             fingerprint: buildFingerprint(line)
           };

@@ -51,6 +51,7 @@ export const api = {
     }),
     me: () => request("/api/auth/me"),
     overview: () => request("/api/dashboard/overview"),
+    securitySummary: () => request("/api/security/summary"),
     searchLogs: (params) => request(`/api/logs/search?${new URLSearchParams(params).toString()}`),
     startAssistantJob: (payload) => request("/api/assistant/query", {
         method: "POST",

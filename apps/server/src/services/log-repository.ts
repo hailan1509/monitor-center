@@ -322,3 +322,59 @@ export async function getOverview() {
     }))
   };
 }
+
+export async function getSecuritySummary() {
+  const [countResult, ipResult, pathResult, uaResult] = await Promise.all([
+    query<{ total: string }>(
+      `
+      SELECT COUNT(*)::int AS total
+      FROM logs
+      WHERE timestamp >= NOW() - INTERVAL '24 HOURS'
+        AND (metadata->>'category') = 'security'
+      `
+    ),
+    query<{ client_ip: string; count: string }>(
+      `
+      SELECT (metadata->>'clientIp') AS client_ip, COUNT(*)::int AS count
+      FROM logs
+      WHERE timestamp >= NOW() - INTERVAL '24 HOURS'
+        AND (metadata->>'category') = 'security'
+        AND (metadata->>'clientIp') IS NOT NULL
+      GROUP BY (metadata->>'clientIp')
+      ORDER BY count DESC
+      LIMIT 20
+      `
+    ),
+    query<{ path: string; count: string }>(
+      `
+      SELECT (metadata->>'httpPath') AS path, COUNT(*)::int AS count
+      FROM logs
+      WHERE timestamp >= NOW() - INTERVAL '24 HOURS'
+        AND (metadata->>'category') = 'security'
+        AND (metadata->>'httpPath') IS NOT NULL
+      GROUP BY (metadata->>'httpPath')
+      ORDER BY count DESC
+      LIMIT 20
+      `
+    ),
+    query<{ user_agent: string; count: string }>(
+      `
+      SELECT (metadata->>'httpUserAgent') AS user_agent, COUNT(*)::int AS count
+      FROM logs
+      WHERE timestamp >= NOW() - INTERVAL '24 HOURS'
+        AND (metadata->>'category') = 'security'
+        AND (metadata->>'httpUserAgent') IS NOT NULL
+      GROUP BY (metadata->>'httpUserAgent')
+      ORDER BY count DESC
+      LIMIT 10
+      `
+    )
+  ]);
+
+  return {
+    total24h: Number(countResult.rows[0]?.total ?? 0),
+    topIps: ipResult.rows.map((row) => ({ clientIp: row.client_ip, count: Number(row.count) })),
+    topPaths: pathResult.rows.map((row) => ({ path: row.path, count: Number(row.count) })),
+    topUserAgents: uaResult.rows.map((row) => ({ userAgent: row.user_agent, count: Number(row.count) }))
+  };
+}

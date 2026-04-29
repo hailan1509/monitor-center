@@ -3,7 +3,7 @@ import { z } from "zod";
 import { assistantRequestSchema, searchQuerySchema, userRoleSchema } from "@monitor-center/shared";
 import { createUser, listUsers, verifyUser } from "../auth/auth-service.js";
 import { requireAuth, requireRole } from "../auth/middleware.js";
-import { getOverview, searchLogs } from "../services/log-repository.js";
+import { getOverview, getSecuritySummary, searchLogs } from "../services/log-repository.js";
 import { createAssistantJob, getAssistantJob } from "../services/assistant-jobs.js";
 
 export function createApiRouter() {
@@ -47,6 +47,10 @@ export function createApiRouter() {
 
   router.get("/dashboard/overview", requireAuth, async (_request, response) => {
     response.json(await getOverview());
+  });
+
+  router.get("/security/summary", requireAuth, async (_request, response) => {
+    response.json(await getSecuritySummary());
   });
 
   router.get("/logs/search", requireAuth, async (request, response) => {
