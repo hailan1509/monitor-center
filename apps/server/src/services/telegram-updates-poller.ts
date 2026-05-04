@@ -72,6 +72,47 @@ export async function deleteTelegramWebhookIfRequested() {
   console.log("[telegram] Webhook cleared; getUpdates polling enabled.");
 }
 
+/** Một vòng getUpdates: lưu subscriber từ chat private (dùng cho poller và script gửi thử). */
+export async function ingestTelegramUpdatesOnce(token: string): Promise<void> {
+  try {
+    const lastStored = await getTelegramPollLastUpdateId();
+    const offset = lastStored === 0 ? 0 : lastStored + 1;
+    const response = await fetch(
+      `https://api.telegram.org/bot${token}/getUpdates?offset=${offset}&timeout=0`,
+      { method: "GET" }
+    );
+    const data = (await response.json()) as GetUpdatesResponse;
+    if (!data.ok) {
+      console.error("[telegram] getUpdates:", data.description ?? `HTTP ${response.status}`);
+      return;
+    }
+
+    let maxId = 0;
+    for (const update of data.result ?? []) {
+      maxId = Math.max(maxId, update.update_id);
+      const payload = update.message ?? update.edited_message;
+      const chat = payload?.chat;
+      if (!chat?.id || chat.type !== "private") {
+        continue;
+      }
+
+      const from = payload?.from;
+      await upsertTelegramReportSubscriber({
+        chatId: String(chat.id),
+        telegramUserId: from?.id != null ? String(from.id) : null,
+        username: from?.username ?? chat.username ?? null,
+        displayName: displayNameFrom(chat, from)
+      });
+    }
+
+    if (maxId > 0) {
+      await setTelegramPollLastUpdateId(maxId);
+    }
+  } catch (error) {
+    console.error("[telegram] ingestTelegramUpdatesOnce:", error);
+  }
+}
+
 export function startTelegramUpdatesPollerIfConfigured() {
   const token = env.TELEGRAM_BOT_TOKEN;
   if (!token || !env.TELEGRAM_POLL_ENABLED) {
@@ -84,48 +125,8 @@ export function startTelegramUpdatesPollerIfConfigured() {
 
   console.log(`[telegram] Subscriber poll every ${env.TELEGRAM_POLL_INTERVAL_MS}ms — share bot: ${botHint}`);
 
-  const tick = async () => {
-    try {
-      const lastStored = await getTelegramPollLastUpdateId();
-      const offset = lastStored === 0 ? 0 : lastStored + 1;
-      const response = await fetch(
-        `https://api.telegram.org/bot${token}/getUpdates?offset=${offset}&timeout=0`,
-        { method: "GET" }
-      );
-      const data = (await response.json()) as GetUpdatesResponse;
-      if (!data.ok) {
-        console.error("[telegram] getUpdates:", data.description ?? `HTTP ${response.status}`);
-        return;
-      }
-
-      let maxId = 0;
-      for (const update of data.result ?? []) {
-        maxId = Math.max(maxId, update.update_id);
-        const payload = update.message ?? update.edited_message;
-        const chat = payload?.chat;
-        if (!chat?.id || chat.type !== "private") {
-          continue;
-        }
-
-        const from = payload?.from;
-        await upsertTelegramReportSubscriber({
-          chatId: String(chat.id),
-          telegramUserId: from?.id != null ? String(from.id) : null,
-          username: from?.username ?? chat.username ?? null,
-          displayName: displayNameFrom(chat, from)
-        });
-      }
-
-      if (maxId > 0) {
-        await setTelegramPollLastUpdateId(maxId);
-      }
-    } catch (error) {
-      console.error("[telegram] Poll error:", error);
-    }
-  };
-
-  void tick();
+  void ingestTelegramUpdatesOnce(token);
   setInterval(() => {
-    void tick();
+    void ingestTelegramUpdatesOnce(token);
   }, env.TELEGRAM_POLL_INTERVAL_MS);
 }
