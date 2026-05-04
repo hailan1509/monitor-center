@@ -457,3 +457,127 @@ export async function purgeLogs(filters: PurgeFilters) {
 
   return { dryRun: false, affected: Number(result.rows[0]?.count ?? 0) };
 }
+
+/** Start of local calendar day → now, both as ISO instants (for digest window). */
+export async function getZonedCalendarDayStartToNow(timeZone: string) {
+  const result = await query<{ day_start: Date; day_end: Date }>(
+    `
+    SELECT
+      (date_trunc('day', NOW() AT TIME ZONE $1::text) AT TIME ZONE $1::text) AS day_start,
+      NOW() AS day_end
+    `,
+    [timeZone]
+  );
+
+  const row = result.rows[0];
+  if (!row) {
+    throw new Error("Failed to resolve calendar day bounds");
+  }
+
+  return {
+    start: row.day_start.toISOString(),
+    end: row.day_end.toISOString()
+  };
+}
+
+export type LogDigestForRange = {
+  projects: Array<{
+    project: string;
+    containerCount: number;
+    healthyContainers: number;
+    totalLogs: number;
+    errorCount: number;
+    warnCount: number;
+  }>;
+  topIssues: Array<{
+    project: string;
+    service: string;
+    level: string;
+    count: number;
+    sampleMessage: string;
+  }>;
+  securityEvents: number;
+};
+
+export async function getLogDigestForRange(startIso: string, endIso: string): Promise<LogDigestForRange> {
+  const [projectResult, issueResult, securityResult] = await Promise.all([
+    query<{
+      project: string;
+      container_count: string;
+      healthy_containers: string;
+      total_logs: string;
+      error_count: string;
+      warn_count: string;
+    }>(
+      `
+      SELECT
+        cs.project,
+        COUNT(*)::int AS container_count,
+        COUNT(*) FILTER (WHERE cs.state = 'running')::int AS healthy_containers,
+        COUNT(l.id)::int AS total_logs,
+        COALESCE(SUM(CASE WHEN l.level IN ('error', 'fatal') THEN 1 ELSE 0 END), 0)::int AS error_count,
+        COALESCE(SUM(CASE WHEN l.level = 'warn' THEN 1 ELSE 0 END), 0)::int AS warn_count
+      FROM container_state cs
+      LEFT JOIN logs l
+        ON l.container_name = cs.container_name
+        AND l.timestamp >= $1::timestamptz
+        AND l.timestamp < $2::timestamptz
+      GROUP BY cs.project
+      ORDER BY cs.project ASC
+      `,
+      [startIso, endIso]
+    ),
+    query<{
+      project: string;
+      service: string;
+      level: string;
+      count: string;
+      sample_message: string;
+    }>(
+      `
+      SELECT
+        project,
+        service,
+        MAX(level) AS level,
+        COUNT(*)::int AS count,
+        MAX(message) AS sample_message
+      FROM logs
+      WHERE timestamp >= $1::timestamptz
+        AND timestamp < $2::timestamptz
+      GROUP BY fingerprint, project, service
+      ORDER BY count DESC, MAX(timestamp) DESC
+      LIMIT 8
+      `,
+      [startIso, endIso]
+    ),
+    query<{ total: string }>(
+      `
+      SELECT COUNT(*)::int AS total
+      FROM logs
+      WHERE timestamp >= $1::timestamptz
+        AND timestamp < $2::timestamptz
+        AND (metadata->>'category') = 'security'
+      `,
+      [startIso, endIso]
+    )
+  ]);
+
+  return {
+    projects: projectResult.rows.map((row) => ({
+      project: row.project,
+      containerCount: Number(row.container_count),
+      healthyContainers: Number(row.healthy_containers),
+      totalLogs: Number(row.total_logs),
+      errorCount: Number(row.error_count),
+      warnCount: Number(row.warn_count)
+    })),
+    topIssues: issueResult.rows.map((row) => ({
+      project: row.project,
+      service: row.service,
+      level: row.level,
+      count: Number(row.count),
+      sampleMessage: row.sample_message
+    })),
+    securityEvents: Number(securityResult.rows[0]?.total ?? 0)
+  };
+}

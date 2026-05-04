@@ -45,6 +45,21 @@ CREATE TABLE IF NOT EXISTS logs (
 CREATE INDEX IF NOT EXISTS idx_logs_project_time ON logs (project, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_logs_level_time ON logs (level, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_logs_fingerprint_time ON logs (fingerprint, timestamp DESC);
+
+CREATE TABLE IF NOT EXISTS telegram_report_subscribers (
+  chat_id TEXT PRIMARY KEY,
+  telegram_user_id TEXT,
+  username TEXT,
+  display_name TEXT,
+  first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS telegram_bot_poll_state (
+  id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  last_update_id BIGINT NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 `;
 
 export function partitionSql(partitionDate: Date) {

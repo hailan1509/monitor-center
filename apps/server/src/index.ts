@@ -9,6 +9,11 @@ import { createApiRouter } from "./api/routes.js";
 import { RealtimeHub } from "./services/ws-hub.js";
 import { DockerCollector } from "./collector/docker-collector.js";
 import { pool } from "./db/index.js";
+import { startTelegramDailyReportIfConfigured } from "./services/telegram-daily-report.js";
+import {
+  deleteTelegramWebhookIfRequested,
+  startTelegramUpdatesPollerIfConfigured
+} from "./services/telegram-updates-poller.js";
 
 async function main() {
   await ensureDatabaseReady();
@@ -48,6 +53,9 @@ async function main() {
   const hub = new RealtimeHub(server);
   const collector = new DockerCollector({ hub });
   await collector.start();
+  await deleteTelegramWebhookIfRequested();
+  startTelegramUpdatesPollerIfConfigured();
+  startTelegramDailyReportIfConfigured();
 
   server.listen(env.PORT, () => {
     console.log(`Monitor server listening on :${env.PORT}`);
