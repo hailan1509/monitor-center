@@ -18,6 +18,28 @@ const envSchema = z.object({
     .string()
     .optional()
     .transform((value) => value === "true"),
+  TELEGRAM_ERROR_ALERTS_ENABLED: z
+    .string()
+    .optional()
+    .transform((value) => value === "true"),
+  /** CSV/space-separated: error,fatal,... */
+  TELEGRAM_ERROR_ALERTS_LEVELS: z
+    .string()
+    .optional()
+    .transform((value) => {
+      if (!value?.trim()) return ["error", "fatal"];
+      return value
+        .split(/[\s,]+/)
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean);
+    }),
+  /** Cooldown per (project/service/fingerprint) to avoid alert spam. */
+  TELEGRAM_ERROR_ALERTS_COOLDOWN_MS: z.coerce.number().min(5_000).max(24 * 60 * 60 * 1000).default(60_000),
+  /** Ignore security noise by default (scanner probes, etc.). */
+  TELEGRAM_ERROR_ALERTS_INCLUDE_SECURITY: z
+    .string()
+    .optional()
+    .transform((value) => value === "true"),
   TELEGRAM_BOT_TOKEN: z
     .string()
     .optional()
