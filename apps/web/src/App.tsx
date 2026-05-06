@@ -17,7 +17,7 @@ const emptySnapshot: DashboardSnapshot = {
   recentLogs: []
 };
 
-type NavKey = "overview" | "live" | "search" | "issues" | "security" | "assistant" | "containers" | "team";
+type NavKey = "overview" | "live" | "search" | "issues" | "security" | "assistant" | "containers" | "team" | "silences";
 
 const navItems: Array<{ key: NavKey; label: string }> = [
   { key: "overview", label: "Overview" },
@@ -27,7 +27,8 @@ const navItems: Array<{ key: NavKey; label: string }> = [
   { key: "security", label: "Security" },
   { key: "assistant", label: "AI Assistant" },
   { key: "containers", label: "Containers" },
-  { key: "team", label: "Team" }
+  { key: "team", label: "Team" },
+  { key: "silences", label: "Silences" }
 ];
 
 const navIcons: Record<NavKey, ReactNode> = {
@@ -94,13 +95,21 @@ const navIcons: Record<NavKey, ReactNode> = {
         d="M16 11a4 4 0 1 0-8 0a4 4 0 0 0 8 0Zm-13 9a7 7 0 0 1 14 0a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Zm15-9a3 3 0 0 0 0-6a1 1 0 1 0 0 2a1 1 0 1 1 0 2a1 1 0 1 0 0 2Zm3 9a1 1 0 0 1-1 1h-1.5a8.97 8.97 0 0 0-1.43-5.03A5 5 0 0 1 22 20Z"
       />
     </svg>
+  ),
+  silences: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M5.293 4.293a1 1 0 0 1 1.414 0L12 9.586l5.293-5.293a1 1 0 1 1 1.414 1.414L13.414 11l5.293 5.293a1 1 0 0 1-1.414 1.414L12 12.414l-5.293 5.293a1 1 0 0 1-1.414-1.414L10.586 11 5.293 5.707a1 1 0 0 1 0-1.414Z"
+      />
+    </svg>
   )
 };
 
 const navSections: Array<{ title: string; keys: NavKey[] }> = [
   { title: "Observability", keys: ["overview", "live", "search", "issues", "security", "containers"] },
   { title: "Automation", keys: ["assistant"] },
-  { title: "Admin", keys: ["team"] }
+  { title: "Admin", keys: ["team", "silences"] }
 ];
 
 function formatShortTime(value: string) {
@@ -155,6 +164,7 @@ export function App() {
   } | null>(null);
   const [purgePreview, setPurgePreview] = useState<number | null>(null);
   const [purgeStatus, setPurgeStatus] = useState<string>("");
+  const [silences, setSilences] = useState<Array<{ project: string; service: string | null; expiresAt: number; remainingMs: number }>>([]);
 
   const pendingRequests = useSyncExternalStore(apiLoadingStore.subscribe, apiLoadingStore.getSnapshot, () => 0);
   const showLoading = pendingRequests > 0;
@@ -293,6 +303,33 @@ export function App() {
     }
   }
 
+  async function refreshSilences() {
+    const response = await api.listSilences();
+    setSilences(response.silences);
+  }
+
+  async function handleAddSilence(formData: FormData) {
+    try {
+      setError("");
+      const project = String(formData.get("project") ?? "");
+      const service = String(formData.get("service") ?? "").trim() || null;
+      const durationMs = Number(formData.get("durationMs"));
+      await api.addSilence({ project, service, durationMs });
+      await refreshSilences();
+    } catch (silenceError) {
+      setError(silenceError instanceof Error ? silenceError.message : "Failed to add silence");
+    }
+  }
+
+  async function handleRemoveSilence(project: string, service: string | null) {
+    try {
+      await api.removeSilence({ project, service });
+      await refreshSilences();
+    } catch (silenceError) {
+      setError(silenceError instanceof Error ? silenceError.message : "Failed to remove silence");
+    }
+  }
+
   async function handlePurgeLogs(formData: FormData) {
     try {
       setError("");
@@ -330,6 +367,12 @@ export function App() {
       setError(purgeError instanceof Error ? purgeError.message : "Unable to purge logs");
     }
   }
+
+  useEffect(() => {
+    if (nav === "silences" && user?.role === "admin") {
+      void refreshSilences();
+    }
+  }, [nav]);
 
   const topProject = useMemo(() => snapshot.projects[0]?.project ?? "No project yet", [snapshot.projects]);
   const allProjects = useMemo(() => {
@@ -439,7 +482,7 @@ export function App() {
               <div className="menu-section-title">{section.title}</div>
               <div className="menu-section-items">
                 {section.keys
-                  .filter((key) => (key === "team" ? user.role === "admin" : true))
+                  .filter((key) => (key === "team" || key === "silences" ? user.role === "admin" : true))
                   .map((key) => {
                     const item = navItems.find((candidate) => candidate.key === key);
                     if (!item) return null;
@@ -971,6 +1014,82 @@ export function App() {
                 {purgePreview !== null ? <div className="muted small">Preview: {purgePreview} rows match.</div> : null}
                 {purgeStatus ? <div className="muted small">{purgeStatus}</div> : null}
               </form>
+            </article>
+          </section>
+        ) : null}
+
+        {nav === "silences" && user.role === "admin" ? (
+          <section className="grid two">
+            <article className="panel">
+              <div className="panel-head">
+                <h2 className="panel-title">Thêm silence</h2>
+                <div className="muted small">Tắt alert trong thời gian bảo trì / deploy</div>
+              </div>
+              <form
+                className="form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handleAddSilence(new FormData(event.currentTarget));
+                  event.currentTarget.reset();
+                }}
+              >
+                <label className="field">
+                  <div className="field-label">Project</div>
+                  <select name="project" required defaultValue="">
+                    <option value="" disabled>Chọn project</option>
+                    {allProjects.map((project) => (
+                      <option key={project} value={project}>{project}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <div className="field-label">Service (để trống = cả project)</div>
+                  <input name="service" placeholder="vd: api, nginx, worker..." />
+                </label>
+                <label className="field">
+                  <div className="field-label">Thời gian</div>
+                  <select name="durationMs" defaultValue="600000">
+                    <option value="600000">10 phút</option>
+                    <option value="1800000">30 phút</option>
+                    <option value="3600000">1 giờ</option>
+                    <option value="7200000">2 giờ</option>
+                    <option value="28800000">8 giờ</option>
+                    <option value="86400000">24 giờ</option>
+                  </select>
+                </label>
+                <button type="submit" className="button">Thêm silence</button>
+              </form>
+            </article>
+
+            <article className="panel">
+              <div className="panel-head">
+                <h2 className="panel-title">Đang active</h2>
+                <div className="muted small">{silences.length} silence(s)</div>
+              </div>
+              {silences.length === 0 ? (
+                <div className="muted small">Không có silence nào đang active.</div>
+              ) : (
+                <div className="table">
+                  {silences.map((s) => (
+                    <div key={`${s.project}::${s.service ?? "*"}`} className="row">
+                      <div className="cell project">{s.project}</div>
+                      <div className="cell container">{s.service ?? "* (cả project)"}</div>
+                      <div className="cell time muted small">
+                        còn {Math.ceil(s.remainingMs / 60000)} phút
+                      </div>
+                      <div className="cell">
+                        <button
+                          type="button"
+                          className="button button-ghost"
+                          onClick={() => void handleRemoveSilence(s.project, s.service)}
+                        >
+                          Xoá
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </article>
           </section>
         ) : null}

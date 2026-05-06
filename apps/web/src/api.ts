@@ -103,5 +103,19 @@ export const api = {
     request<{ user: { id: string } }>("/api/users", {
       method: "POST",
       body: JSON.stringify(payload)
+    }),
+  listSilences: () =>
+    request<{
+      silences: Array<{ project: string; service: string | null; expiresAt: number; remainingMs: number }>
+    }>("/api/silences"),
+  addSilence: (payload: { project: string; service: string | null; durationMs: number }) =>
+    request<{ ok: boolean; expiresAt: string }>("/api/silences", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  removeSilence: (payload: { project: string; service: string | null }) =>
+    request<{ ok: boolean }>("/api/silences", {
+      method: "DELETE",
+      body: JSON.stringify(payload)
     })
 };
