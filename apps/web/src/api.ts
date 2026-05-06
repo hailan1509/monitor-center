@@ -104,6 +104,22 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload)
     }),
+  containerStats: () =>
+    request<{
+      stats: Array<{
+        containerId: string; containerName: string; project: string; service: string;
+        cpuPercent: number; memoryPercent: number; memoryUsageBytes: number; memoryLimitBytes: number;
+        collectedAt: string;
+      }>
+    }>("/api/containers/stats"),
+  uptimeChecks: () =>
+    request<{
+      checks: Array<{
+        name: string; url: string; up: boolean;
+        statusCode: number | null; latencyMs: number | null;
+        lastCheckedAt: string; error: string | null;
+      }>
+    }>("/api/uptime"),
   listSilences: () =>
     request<{
       silences: Array<{ project: string; service: string | null; expiresAt: number; remainingMs: number }>

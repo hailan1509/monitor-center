@@ -35,12 +35,16 @@ export class DockerCollector {
   #hub: RealtimeHub;
   #activeStreams = new Map<string, unknown>();
   #prevStates = new Map<string, string>(); // containerId → state
+  #containerMeta = new Map<string, { containerId: string; containerName: string; project: string; service: string }>();
   #initialized = false;
   #started = false;
+
+  readonly docker: Docker;
 
   constructor({ hub }: CollectorDependencies) {
     this.#hub = hub;
     this.#docker = new Docker({ socketPath: env.DOCKER_SOCKET_PATH });
+    this.docker = this.#docker;
   }
 
   async start() {
@@ -108,6 +112,7 @@ export class DockerCollector {
         }
 
         this.#prevStates.set(containerId, currentState);
+        this.#containerMeta.set(containerId, { containerId, containerName, project: mapping.project, service: mapping.service });
 
         if (currentState === "running" && !this.#activeStreams.has(containerId)) {
           await this.attachToLogs(containerId, containerName, mapping.project, mapping.service);
@@ -117,10 +122,23 @@ export class DockerCollector {
 
     // Dọn state của container đã biến mất khỏi danh sách.
     for (const id of this.#prevStates.keys()) {
-      if (!seenIds.has(id)) this.#prevStates.delete(id);
+      if (!seenIds.has(id)) {
+        this.#prevStates.delete(id);
+        this.#containerMeta.delete(id);
+      }
     }
 
     this.#initialized = true;
+  }
+
+  getRunningContainers(): Array<{ containerId: string; containerName: string; project: string; service: string }> {
+    return Array.from(this.#prevStates.entries())
+      .filter(([, state]) => state === "running")
+      .map(([containerId]) => {
+        // containerName/project/service tracked via activeStreams metadata không có sẵn —
+        // dùng lại từ #containerMeta
+        return this.#containerMeta.get(containerId) ?? { containerId, containerName: containerId, project: "unknown", service: "unknown" };
+      });
   }
 
   async attachToLogs(containerId: string, containerName: string, project: string, service: string) {

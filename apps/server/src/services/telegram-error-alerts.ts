@@ -44,7 +44,7 @@ async function sendTelegramText(token: string, chatId: string, text: string) {
   }
 }
 
-async function broadcastText(text: string): Promise<void> {
+export async function broadcastText(text: string): Promise<void> {
   const token = env.TELEGRAM_BOT_TOKEN;
   if (!token) return;
 

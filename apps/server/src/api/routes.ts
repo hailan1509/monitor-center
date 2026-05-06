@@ -3,6 +3,8 @@ import { z } from "zod";
 import { assistantRequestSchema, logPurgeRequestSchema, searchQuerySchema, userRoleSchema } from "@monitor-center/shared";
 import { createUser, listUsers, verifyUser } from "../auth/auth-service.js";
 import { silenceManager } from "../services/silence-manager.js";
+import { getLatestStats } from "../services/container-stats.js";
+import { getUptimeStatuses } from "../services/uptime-checker.js";
 import { requireAuth, requireRole } from "../auth/middleware.js";
 import { getOverview, getSecuritySummary, purgeLogs, searchLogs } from "../services/log-repository.js";
 import { createAssistantJob, getAssistantJob } from "../services/assistant-jobs.js";
@@ -114,6 +116,18 @@ export function createApiRouter() {
       result: job.result,
       error: job.error
     });
+  });
+
+  // ── Container stats ───────────────────────────────────────────────────────
+
+  router.get("/containers/stats", requireAuth, (_request, response) => {
+    response.json({ stats: getLatestStats() });
+  });
+
+  // ── Uptime checks ─────────────────────────────────────────────────────────
+
+  router.get("/uptime", requireAuth, (_request, response) => {
+    response.json({ checks: getUptimeStatuses() });
   });
 
   // ── Silence / maintenance window ──────────────────────────────────────────

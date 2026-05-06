@@ -165,6 +165,16 @@ export function App() {
   const [purgePreview, setPurgePreview] = useState<number | null>(null);
   const [purgeStatus, setPurgeStatus] = useState<string>("");
   const [silences, setSilences] = useState<Array<{ project: string; service: string | null; expiresAt: number; remainingMs: number }>>([]);
+  const [containerStats, setContainerStats] = useState<Array<{
+    containerId: string; containerName: string; project: string; service: string;
+    cpuPercent: number; memoryPercent: number; memoryUsageBytes: number; memoryLimitBytes: number;
+    collectedAt: string;
+  }>>([]);
+  const [uptimeChecks, setUptimeChecks] = useState<Array<{
+    name: string; url: string; up: boolean;
+    statusCode: number | null; latencyMs: number | null;
+    lastCheckedAt: string; error: string | null;
+  }>>([]);
 
   const pendingRequests = useSyncExternalStore(apiLoadingStore.subscribe, apiLoadingStore.getSnapshot, () => 0);
   const showLoading = pendingRequests > 0;
@@ -369,9 +379,9 @@ export function App() {
   }
 
   useEffect(() => {
-    if (nav === "silences" && user?.role === "admin") {
-      void refreshSilences();
-    }
+    if (nav === "silences" && user?.role === "admin") void refreshSilences();
+    if (nav === "containers" && user) void api.containerStats().then((r) => setContainerStats(r.stats)).catch(() => undefined);
+    if ((nav === "overview" || nav === "containers") && user) void api.uptimeChecks().then((r) => setUptimeChecks(r.checks)).catch(() => undefined);
   }, [nav]);
 
   const topProject = useMemo(() => snapshot.projects[0]?.project ?? "No project yet", [snapshot.projects]);
@@ -582,6 +592,29 @@ export function App() {
                 </article>
               ))}
             </section>
+
+            {uptimeChecks.length > 0 ? (
+              <section className="panel">
+                <div className="panel-head">
+                  <h2 className="panel-title">Uptime checks</h2>
+                  <div className="muted small">{uptimeChecks.filter((c) => c.up).length}/{uptimeChecks.length} up</div>
+                </div>
+                <div className="table">
+                  {uptimeChecks.map((check) => (
+                    <div key={check.name} className="row">
+                      <div className="cell level">
+                        <span className={check.up ? "badge badge-ok" : "badge badge-error"}>{check.up ? "UP" : "DOWN"}</span>
+                      </div>
+                      <div className="cell project">{check.name}</div>
+                      <div className="cell message muted small">{check.url}</div>
+                      <div className="cell time muted small">
+                        {check.up ? `${check.latencyMs}ms` : (check.error ?? `HTTP ${check.statusCode}`)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : null}
 
             <section className="grid two">
               <article className="panel">
@@ -881,24 +914,68 @@ export function App() {
         ) : null}
 
         {nav === "containers" ? (
-          <section className="panel">
-            <div className="panel-head">
-              <h2 className="panel-title">Containers</h2>
-              <div className="muted small">Collected from Docker Engine</div>
-            </div>
-            <div className="table container-table">
-              {snapshot.containers.map((container: DashboardSnapshot["containers"][number]) => (
-                <div key={container.containerId} className="row">
-                  <div className="cell project">{container.project}</div>
-                  <div className="cell container">{container.containerName}</div>
-                  <div className="cell level">
-                    <span className={container.state === "running" ? "badge badge-ok" : "badge badge-muted"}>{container.state}</span>
-                  </div>
-                  <div className="cell message">{container.image}</div>
+          <>
+            {uptimeChecks.length > 0 ? (
+              <section className="panel">
+                <div className="panel-head">
+                  <h2 className="panel-title">Uptime checks</h2>
+                  <div className="muted small">{uptimeChecks.filter((c) => c.up).length}/{uptimeChecks.length} up</div>
                 </div>
-              ))}
-            </div>
-          </section>
+                <div className="table">
+                  {uptimeChecks.map((check) => (
+                    <div key={check.name} className="row">
+                      <div className="cell level">
+                        <span className={check.up ? "badge badge-ok" : "badge badge-error"}>{check.up ? "UP" : "DOWN"}</span>
+                      </div>
+                      <div className="cell project">{check.name}</div>
+                      <div className="cell message muted small">{check.url}</div>
+                      <div className="cell time muted small">
+                        {check.up ? `${check.latencyMs}ms` : (check.error ?? `HTTP ${check.statusCode}`)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
+            <section className="panel">
+              <div className="panel-head">
+                <h2 className="panel-title">Containers</h2>
+                <div className="muted small">Collected from Docker Engine</div>
+              </div>
+              <div className="table container-table">
+                {snapshot.containers.map((container: DashboardSnapshot["containers"][number]) => {
+                  const stats = containerStats.find((s) => s.containerName === container.containerName);
+                  return (
+                    <div key={container.containerId} className="row">
+                      <div className="cell project">{container.project}</div>
+                      <div className="cell container">{container.containerName}</div>
+                      <div className="cell level">
+                        <span className={container.state === "running" ? "badge badge-ok" : "badge badge-muted"}>{container.state}</span>
+                      </div>
+                      {stats ? (
+                        <>
+                          <div className="cell muted small" title="CPU">
+                            CPU {stats.cpuPercent.toFixed(1)}%
+                          </div>
+                          <div
+                            className="cell muted small"
+                            title="Memory"
+                            style={{ color: stats.memoryPercent >= 90 ? "var(--color-error, #e53)" : undefined }}
+                          >
+                            MEM {stats.memoryPercent.toFixed(1)}%
+                          </div>
+                        </>
+                      ) : (
+                        <div className="cell muted small">—</div>
+                      )}
+                      <div className="cell message">{container.image}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          </>
         ) : null}
 
         {nav === "team" && user.role === "admin" ? (
