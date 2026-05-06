@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { assistantRequestSchema, logPurgeRequestSchema, searchQuerySchema, userRoleSchema } from "@monitor-center/shared";
 import { createUser, listUsers, verifyUser } from "../auth/auth-service.js";
+import { silenceManager } from "../services/silence-manager.js";
 import { requireAuth, requireRole } from "../auth/middleware.js";
 import { getOverview, getSecuritySummary, purgeLogs, searchLogs } from "../services/log-repository.js";
 import { createAssistantJob, getAssistantJob } from "../services/assistant-jobs.js";
@@ -113,6 +114,42 @@ export function createApiRouter() {
       result: job.result,
       error: job.error
     });
+  });
+
+  // ── Silence / maintenance window ──────────────────────────────────────────
+
+  router.get("/silences", requireAuth, (_request, response) => {
+    response.json({ silences: silenceManager.listActive() });
+  });
+
+  router.post("/silences", requireRole("admin"), (request, response) => {
+    const schema = z.object({
+      project: z.string().min(1),
+      service: z.string().min(1).nullable().default(null),
+      durationMs: z.number().int().min(60_000).max(24 * 60 * 60 * 1000)
+    });
+    const parsed = schema.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ error: parsed.error.flatten() });
+      return;
+    }
+    const { project, service, durationMs } = parsed.data;
+    silenceManager.silence(project, service, durationMs);
+    response.json({ ok: true, expiresAt: new Date(Date.now() + durationMs).toISOString() });
+  });
+
+  router.delete("/silences", requireRole("admin"), (request, response) => {
+    const schema = z.object({
+      project: z.string().min(1),
+      service: z.string().min(1).nullable().default(null)
+    });
+    const parsed = schema.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ error: parsed.error.flatten() });
+      return;
+    }
+    silenceManager.clear(parsed.data.project, parsed.data.service);
+    response.json({ ok: true });
   });
 
   router.get("/users", requireRole("admin"), async (_request, response) => {

@@ -9,7 +9,8 @@ import { insertLog, upsertContainerState } from "../services/log-repository.js";
 import { buildFingerprint } from "../services/fingerprint.js";
 import { inferLogLevel, normalizeMessage } from "../services/log-level.js";
 import { classifySecurityEvent, parseNginxAccessLog } from "../services/access-log.js";
-import { telegramErrorAlerter } from "../services/telegram-error-alerts.js";
+import { telegramErrorAlerter, sendCrashAlert, sendSpikeAlert } from "../services/telegram-error-alerts.js";
+import { spikeDetector } from "../services/spike-detector.js";
 import type { RealtimeHub } from "../services/ws-hub.js";
 
 function inferPostgresSeverity(message: string) {
@@ -33,6 +34,8 @@ export class DockerCollector {
   #docker: Docker;
   #hub: RealtimeHub;
   #activeStreams = new Map<string, unknown>();
+  #prevStates = new Map<string, string>(); // containerId → state
+  #initialized = false;
   #started = false;
 
   constructor({ hub }: CollectorDependencies) {
@@ -66,27 +69,58 @@ export class DockerCollector {
       return;
     }
 
+    const seenIds = new Set<string>();
+
     await Promise.all(
       containers.map(async (containerInfo) => {
-        const containerName = containerInfo.Names[0]?.replace(/^\//, "") ?? containerInfo.Id;
+        const containerId = containerInfo.Id;
+        seenIds.add(containerId);
+
+        const containerName = containerInfo.Names[0]?.replace(/^\//, "") ?? containerId;
         const mapping = resolveProject(containerName, containerInfo.Labels ?? {});
+        const currentState = containerInfo.State ?? "unknown";
+
         await upsertContainerState({
-          containerId: containerInfo.Id,
+          containerId,
           containerName,
           project: mapping.project,
           service: mapping.service,
           status: containerInfo.Status ?? "unknown",
-          state: containerInfo.State ?? "unknown",
+          state: currentState,
           image: containerInfo.Image,
           startedAt: containerInfo.Created ? new Date(containerInfo.Created * 1000).toISOString() : null,
           labels: containerInfo.Labels ?? {}
         });
 
-        if (containerInfo.State === "running" && !this.#activeStreams.has(containerInfo.Id)) {
-          await this.attachToLogs(containerInfo.Id, containerName, mapping.project, mapping.service);
+        // Phát hiện crash: container chuyển từ running → exited/dead.
+        if (this.#initialized) {
+          const prevState = this.#prevStates.get(containerId);
+          if (prevState === "running" && (currentState === "exited" || currentState === "dead")) {
+            const exitCodeMatch = (containerInfo.Status ?? "").match(/Exited \((-?\d+)\)/);
+            const exitCode = exitCodeMatch ? Number(exitCodeMatch[1]) : null;
+            void sendCrashAlert({
+              project: mapping.project,
+              service: mapping.service,
+              containerName,
+              exitCode
+            });
+          }
+        }
+
+        this.#prevStates.set(containerId, currentState);
+
+        if (currentState === "running" && !this.#activeStreams.has(containerId)) {
+          await this.attachToLogs(containerId, containerName, mapping.project, mapping.service);
         }
       })
     );
+
+    // Dọn state của container đã biến mất khỏi danh sách.
+    for (const id of this.#prevStates.keys()) {
+      if (!seenIds.has(id)) this.#prevStates.delete(id);
+    }
+
+    this.#initialized = true;
   }
 
   async attachToLogs(containerId: string, containerName: string, project: string, service: string) {
@@ -168,6 +202,13 @@ export class DockerCollector {
           void insertLog(log);
           this.#hub.broadcastLog(log);
           void telegramErrorAlerter.maybeSend(log);
+
+          if (level === "error" || level === "fatal") {
+            const spike = spikeDetector.record(project, service);
+            if (spike.isSpike) {
+              void sendSpikeAlert(project, service, spike);
+            }
+          }
         }
       };
 
