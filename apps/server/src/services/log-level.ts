@@ -2,9 +2,10 @@ import type { LogLevel } from "@monitor-center/shared";
 
 const levelMatchers: Array<{ level: LogLevel; pattern: RegExp }> = [
   { level: "fatal", pattern: /\bfatal\b/i },
-  // Match real HTTP status codes, not byte sizes like "56167".
-  { level: "error", pattern: /\berror\b|\bexception\b|\bpanic\b|\b5\d{2}\b/i },
-  { level: "warn", pattern: /\bwarn\b|\bwarning\b|\b4\d{2}\b/i },
+  // HTTP status codes are handled separately via access log parsing.
+  // Avoid matching generic 3-digit numbers (e.g. timestamps like ".558") as errors.
+  { level: "error", pattern: /\berror\b|\bexception\b|\bpanic\b/i },
+  { level: "warn", pattern: /\bwarn\b|\bwarning\b/i },
   { level: "info", pattern: /\binfo\b|\bstarted\b|\blisten\b/i },
   { level: "debug", pattern: /\bdebug\b/i },
   { level: "trace", pattern: /\btrace\b/i }
@@ -20,6 +21,12 @@ function parseHttpStatusFromAccessLog(message: string): number | null {
 }
 
 export function inferLogLevel(message: string, stream: "stdout" | "stderr"): LogLevel {
+  // Stack frames (e.g. "at process.processTimers (node:internal/timers:521:7)")
+  // are context for an error, but shouldn't be treated as standalone error events.
+  if (/^\s*at\s+\S+/.test(message)) {
+    return "info";
+  }
+
   // If it's an HTTP access log, classify by status code.
   const status = parseHttpStatusFromAccessLog(message);
   if (status) {

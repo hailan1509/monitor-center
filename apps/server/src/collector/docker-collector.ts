@@ -13,7 +13,7 @@ import type { RealtimeHub } from "../services/ws-hub.js";
 
 function inferPostgresSeverity(message: string) {
   // Postgres log lines often include "LOG:", "WARNING:", "ERROR:", etc.
-  const match = message.match(/\b(LOG|INFO|NOTICE|WARNING|ERROR|FATAL|PANIC):\b/i);
+  const match = message.match(/\b(LOG|INFO|NOTICE|WARNING|ERROR|FATAL|PANIC):/i);
   if (!match) return null;
 
   const token = match[1].toUpperCase();
