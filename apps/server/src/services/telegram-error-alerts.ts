@@ -55,16 +55,14 @@ function formatVietnamTime(iso: string) {
 
 function formatAlert(log: AlertLog) {
   const lines: string[] = [];
-  lines.push("🚨 Monitor Center — Cảnh báo lỗi");
-  lines.push(`Giờ (VN): ${formatVietnamTime(log.timestamp)}`);
-  lines.push(`Project: ${log.project}`);
-  lines.push(`Service: ${log.service}`);
-  lines.push(`Container: ${log.containerName}`);
-  lines.push(`Mức: ${log.level}`);
+  lines.push(`🚨 [${String(log.level).toUpperCase()}] ${log.project} / ${log.service}`);
+  lines.push(`🕐 ${formatVietnamTime(log.timestamp)}`);
+  lines.push(`📦 Container: ${log.containerName}`);
+  lines.push(`📡 Stream: ${log.stream} | Mức: ${log.level}`);
   if (log.fingerprint) {
-    lines.push(`Fingerprint: ${log.fingerprint}`);
+    lines.push(`🔑 Fingerprint: ${log.fingerprint.slice(0, 8)}`);
   }
-  lines.push("");
+  lines.push("─────────────────────");
   lines.push(log.message);
   return lines.join("\n");
 }
@@ -82,6 +80,9 @@ class TelegramErrorAlerter {
 
     const category = typeof log.metadata?.category === "string" ? log.metadata.category : undefined;
     if (category === "security" && !env.TELEGRAM_ERROR_ALERTS_INCLUDE_SECURITY) return;
+
+    // Bỏ qua log nội bộ của chính monitor-server để tránh feedback loop.
+    if (/^\[telegram\]|\[db\]/.test(log.message)) return;
 
     const fingerprint = log.fingerprint ?? "";
     const key = `${log.project}::${log.service}::${fingerprint || log.message.slice(0, 120)}`;
@@ -111,9 +112,9 @@ class TelegramErrorAlerter {
           }
         }
         if (errors.length === chatIds.length) {
-          console.error("[telegram] Error alert failed for all chats:\n", errors.join("\n"));
+          console.error(`[telegram] Alert failed for all chats (${chatIds.length}): ${errors.join(" | ")}`);
         } else if (errors.length) {
-          console.error("[telegram] Error alert failed for some chats:\n", errors.join("\n"));
+          console.warn(`[telegram] Alert failed for ${errors.length}/${chatIds.length} chat(s): ${errors.join(" | ")}`);
         }
       } finally {
         this.#inflight.delete(key);

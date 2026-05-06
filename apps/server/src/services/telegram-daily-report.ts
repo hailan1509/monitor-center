@@ -63,10 +63,10 @@ async function sendTelegramTextToAll(token: string, chatIds: string[], text: str
     }
   }
   if (errors.length === chatIds.length) {
-    throw new Error(`Telegram: gửi thất bại cho mọi chat:\n${errors.join("\n")}`);
+    throw new Error(`Telegram: gửi thất bại cho mọi chat (${chatIds.length}): ${errors.join(" | ")}`);
   }
   if (errors.length > 0) {
-    console.error("[telegram] Một số chat gửi lỗi:\n", errors.join("\n"));
+    console.warn(`[telegram] Daily digest: ${errors.length}/${chatIds.length} chat(s) thất bại: ${errors.join(" | ")}`);
   }
 }
 
