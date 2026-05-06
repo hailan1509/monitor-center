@@ -9,6 +9,7 @@ import { insertLog, upsertContainerState } from "../services/log-repository.js";
 import { buildFingerprint } from "../services/fingerprint.js";
 import { inferLogLevel, normalizeMessage } from "../services/log-level.js";
 import { classifySecurityEvent, parseNginxAccessLog } from "../services/access-log.js";
+import { telegramErrorAlerter } from "../services/telegram-error-alerts.js";
 import type { RealtimeHub } from "../services/ws-hub.js";
 
 function inferPostgresSeverity(message: string) {
@@ -166,6 +167,7 @@ export class DockerCollector {
 
           void insertLog(log);
           this.#hub.broadcastLog(log);
+          void telegramErrorAlerter.maybeSend(log);
         }
       };
 
