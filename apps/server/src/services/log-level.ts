@@ -6,7 +6,7 @@ const levelMatchers: Array<{ level: LogLevel; pattern: RegExp }> = [
   // Avoid matching generic 3-digit numbers (e.g. timestamps like ".558") as errors.
   { level: "error", pattern: /\berror\b|\bexception\b|\bpanic\b/i },
   { level: "warn", pattern: /\bwarn\b|\bwarning\b/i },
-  { level: "info", pattern: /\binfo\b|\bstarted\b|\blisten\b/i },
+  { level: "info", pattern: /\binfo\b|\bstarted\b|\blisten/i },
   { level: "debug", pattern: /\bdebug\b/i },
   { level: "trace", pattern: /\btrace\b/i }
 ];
@@ -51,10 +51,12 @@ export function inferLogLevel(message: string, stream: "stdout" | "stderr"): Log
 }
 
 export function normalizeMessage(raw: string) {
-  // Clean up control characters and null bytes that can appear
-  // when logs are framed or contain binary.
   return raw
-    .replace(/\u0000/g, "")
-    .replace(/[\u0001-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+    .replace(/\x00/g, "")
+    .replace(/[\x01-\x08\x0B\x0C\x0E-\x1F]/g, "")
+    // Docker multiplexing: after null bytes are stripped, the 4th size byte may remain
+    // as a printable char (e.g. 0x63='c' for a 99-byte frame). Strip it when it
+    // precedes a timestamp -- the only safe pattern to identify it.
+    .replace(/^[\x20-\x7E](?=\d{4}-\d{2}-\d{2})/, "")
     .trim();
 }

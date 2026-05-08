@@ -72,18 +72,34 @@ export async function deleteTelegramWebhookIfRequested() {
   console.log("[telegram] Webhook cleared; getUpdates polling enabled.");
 }
 
+let pollIntervalHandle: ReturnType<typeof setInterval> | null = null;
+
 /** Một vòng getUpdates: lưu subscriber từ chat private (dùng cho poller và script gửi thử). */
 export async function ingestTelegramUpdatesOnce(token: string): Promise<void> {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 15_000);
+
   try {
     const lastStored = await getTelegramPollLastUpdateId();
     const offset = lastStored === 0 ? 0 : lastStored + 1;
     const response = await fetch(
       `https://api.telegram.org/bot${token}/getUpdates?offset=${offset}&timeout=0`,
-      { method: "GET" }
+      { method: "GET", signal: ac.signal }
     );
     const data = (await response.json()) as GetUpdatesResponse;
+
     if (!data.ok) {
-      console.error("[telegram] getUpdates:", data.description ?? `HTTP ${response.status}`);
+      const desc = data.description ?? `HTTP ${response.status}`;
+      // Conflict = another instance is already polling; stop this poller to avoid spam
+      if (desc.toLowerCase().includes("conflict")) {
+        console.warn("[telegram] getUpdates Conflict — another instance detected; stopping poller");
+        if (pollIntervalHandle) {
+          clearInterval(pollIntervalHandle);
+          pollIntervalHandle = null;
+        }
+        return;
+      }
+      console.warn("[telegram] getUpdates:", desc);
       return;
     }
 
@@ -109,7 +125,13 @@ export async function ingestTelegramUpdatesOnce(token: string): Promise<void> {
       await setTelegramPollLastUpdateId(maxId);
     }
   } catch (error) {
-    console.error("[telegram] ingestTelegramUpdatesOnce:", error);
+    if (error instanceof Error && error.name === "AbortError") {
+      console.warn("[telegram] getUpdates: request timed out (15s)");
+    } else {
+      console.warn("[telegram] ingestTelegramUpdatesOnce:", error instanceof Error ? error.message : error);
+    }
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -126,7 +148,7 @@ export function startTelegramUpdatesPollerIfConfigured() {
   console.log(`[telegram] Subscriber poll every ${env.TELEGRAM_POLL_INTERVAL_MS}ms — share bot: ${botHint}`);
 
   void ingestTelegramUpdatesOnce(token);
-  setInterval(() => {
+  pollIntervalHandle = setInterval(() => {
     void ingestTelegramUpdatesOnce(token);
   }, env.TELEGRAM_POLL_INTERVAL_MS);
 }
