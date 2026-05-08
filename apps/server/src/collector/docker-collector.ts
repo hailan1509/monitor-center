@@ -38,6 +38,10 @@ function shouldSkipLine(line: string, service: string): boolean {
   // MySQL deprecated auth plugin warning — fires on every connection, never actionable
   if (/(?:sha256_password|caching_sha2_password).*deprecated/i.test(trimmed)) return true;
 
+  // Nginx Proxy Manager SSL renewal — runs every hour even when nothing needs renewal
+  if (/\[SSL\s*\].*(?:Renewing SSL certs expiring|Completed SSL cert renew process)/i.test(trimmed)) return true;
+  if (/\[IP Ranges\].*(?:Fetching IP Ranges|Fetching https?:\/\/)/i.test(trimmed)) return true;
+
   // HTTP access log 200 OK from Docker internal network — these are health checks / uptime
   // pings between containers. A 200 means everything is fine; no anomaly to detect.
   // Non-200 responses from internal IPs are kept because they may indicate misconfiguration.
