@@ -4,6 +4,7 @@ import {
   setTelegramPollLastUpdateId,
   upsertTelegramReportSubscriber
 } from "./telegram-subscribers.js";
+import { handleTelegramChat } from "./telegram-chat-handler.js";
 
 type TelegramChat = {
   id: number;
@@ -23,6 +24,7 @@ type TelegramUser = {
 type IncomingMessage = {
   chat?: TelegramChat;
   from?: TelegramUser;
+  text?: string;
 };
 
 type TelegramUpdate = {
@@ -119,6 +121,10 @@ export async function ingestTelegramUpdatesOnce(token: string): Promise<void> {
         username: from?.username ?? chat.username ?? null,
         displayName: displayNameFrom(chat, from)
       });
+
+      if (payload?.text) {
+        void handleTelegramChat(String(chat.id), payload.text);
+      }
     }
 
     if (maxId > 0) {

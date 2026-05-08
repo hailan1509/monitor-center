@@ -41,6 +41,8 @@ export async function answerLogQuestion(input: {
   project?: string;
   start?: string;
   end?: string;
+  systemPrompt?: string;
+  extraContext?: string;
 }) {
   const logs = await searchLogs({
     project: input.project,
@@ -59,8 +61,13 @@ export async function answerLogQuestion(input: {
     message: log.message
   }));
 
-  const contextText = JSON.stringify(summary, null, 2);
+  const logText = JSON.stringify(summary, null, 2);
+  const contextText = input.extraContext
+    ? `${input.extraContext}\n\nLog gần nhất:\n${logText}`
+    : logText;
+
   const systemText =
+    input.systemPrompt ??
     "You are an internal observability assistant. Answer using only the provided log context. If evidence is weak, say so. Highlight likely root causes, impacted service, and recommended next checks.";
 
   if (geminiClient) {
