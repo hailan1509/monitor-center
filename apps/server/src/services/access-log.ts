@@ -48,54 +48,25 @@ export function classifySecurityEvent(input: { path?: string; status?: number; u
     "/wp-includes",
     "/.env",
     "/.git",
-    "/.aws",
     "/phpmyadmin",
     "/cgi-bin",
     "/admin",
     "/login",
-    "/actuator",
-    "/shell",
-    "/webshell",
-    "/ws/v1/cluster",
-    "/api/config",
-    "/api/env"
-  ];
-
-  // Sensitive credential/config files that scanners probe at arbitrary depths.
-  const sensitiveFilePatterns = [
-    "serviceaccountkey.json",
-    "firebase-service-account.json",
-    "google-service-account.json",
-    "service-account.json",
-    "credentials.json",
-    "secrets.json",
-    "appsettings.json"
+    "/actuator"
   ];
 
   const suspiciousUserAgents = ["zgrab", "masscan", "python-requests", "sqlmap", "acunetix", "nmap", "curl", "wget"];
 
   if (suspiciousPathPrefixes.some((prefix) => path.startsWith(prefix))) return true;
-  if (sensitiveFilePatterns.some((f) => path.includes(f))) return true;
   if (suspiciousUserAgents.some((needle) => ua.includes(needle))) return true;
-  // Binary control sequences: TLS ClientHello (\x16\x03) or legacy probes (\x03\x00).
-  if (message.includes("\\x16\\x03") || message.includes("\x16\x03")) return true;
-  if (message.includes("\\x03\\x00") || message.includes("\x03\x00")) return true;
+  if (message.includes("\\x03\\x00") || message.includes("\u0003\u0000")) return true;
 
   // Consider auth failures and malformed requests as security noise.
   if ([400, 401, 403].includes(status)) return true;
 
   // A lot of scanners cause 404 to common sensitive paths; only treat 404 as security when path looks suspicious.
-  if (
-    status === 404 &&
-    (path.includes("wp-") ||
-      path.includes(".php") ||
-      path.includes(".env") ||
-      path.includes(".git") ||
-      path.includes(".aws") ||
-      path.includes("credentials") ||
-      path.includes("service-account"))
-  )
-    return true;
+  if (status === 404 && (path.includes("wp-") || path.includes(".php") || path.includes(".env") || path.includes(".git"))) return true;
 
   return false;
 }
+
