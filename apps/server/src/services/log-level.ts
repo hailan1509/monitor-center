@@ -5,7 +5,7 @@ const levelMatchers: Array<{ level: LogLevel; pattern: RegExp }> = [
   // HTTP status codes are handled separately via access log parsing.
   // Avoid matching generic 3-digit numbers (e.g. timestamps like ".558") as errors.
   { level: "error", pattern: /\berror\b|\bexception\b|\bpanic\b/i },
-  { level: "warn", pattern: /\bwarn\b|\bwarning\b/i },
+  { level: "warn", pattern: /\bwarn\b|\bwarning\b|\bfailed\b/i },
   { level: "info", pattern: /\binfo\b|\bstarted\b|\blisten\b/i },
   { level: "debug", pattern: /\bdebug\b/i },
   { level: "trace", pattern: /\btrace\b/i }
