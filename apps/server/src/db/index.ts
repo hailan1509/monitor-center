@@ -5,6 +5,10 @@ export const pool = new Pool({
   connectionString: env.DATABASE_URL
 });
 
+pool.on("error", (err) => {
+  console.error("[db] Idle client error:", err.message, err.stack);
+});
+
 export async function query<T extends QueryResultRow>(text: string, params?: unknown[]) {
   const result = await pool.query<T>(text, params);
   return result;

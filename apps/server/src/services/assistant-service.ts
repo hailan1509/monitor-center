@@ -41,16 +41,47 @@ export async function answerLogQuestion(input: {
   project?: string;
   start?: string;
   end?: string;
+  systemPrompt?: string;
+  extraContext?: string;
 }) {
-  const logs = await searchLogs({
-    project: input.project,
-    start: input.start,
-    end: input.end,
-    limit: 80
+  const now = new Date();
+  const since24h = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+  const since2h = new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString();
+
+  // Query song song: errors + fatals trong 24h, và tất cả levels trong 2h gần nhất
+  const [errorLogs, fatalLogs, recentLogs] = await Promise.all([
+    searchLogs({
+      project: input.project,
+      start: input.start ?? since24h,
+      end: input.end,
+      level: "error",
+      limit: 100
+    }),
+    searchLogs({
+      project: input.project,
+      start: input.start ?? since24h,
+      end: input.end,
+      level: "fatal",
+      limit: 50
+    }),
+    searchLogs({
+      project: input.project,
+      start: input.start ?? since2h,
+      end: input.end,
+      limit: 100
+    })
+  ]);
+
+  // Merge và dedup theo id, ưu tiên errors
+  const seen = new Set<string>();
+  const merged = [...fatalLogs, ...errorLogs, ...recentLogs].filter((log) => {
+    if (seen.has(log.id)) return false;
+    seen.add(log.id);
+    return true;
   });
 
-  const filtered = logs.filter((log) => !isSecurityNoise(log));
-  const summary = filtered.slice(0, 80).map((log) => ({
+  const filtered = merged.filter((log) => !isSecurityNoise(log));
+  const summary = filtered.slice(0, 200).map((log) => ({
     timestamp: log.timestamp,
     project: log.project,
     service: log.service,
@@ -59,8 +90,13 @@ export async function answerLogQuestion(input: {
     message: log.message
   }));
 
-  const contextText = JSON.stringify(summary, null, 2);
+  const logText = JSON.stringify(summary, null, 2);
+  const contextText = input.extraContext
+    ? `${input.extraContext}\n\nLog gần nhất:\n${logText}`
+    : logText;
+
   const systemText =
+    input.systemPrompt ??
     "You are an internal observability assistant. Answer using only the provided log context. If evidence is weak, say so. Highlight likely root causes, impacted service, and recommended next checks.";
 
   if (geminiClient) {

@@ -14,6 +14,8 @@ import {
   deleteTelegramWebhookIfRequested,
   startTelegramUpdatesPollerIfConfigured
 } from "./services/telegram-updates-poller.js";
+import { startContainerStatsPoller } from "./services/container-stats.js";
+import { startUptimeChecker } from "./services/uptime-checker.js";
 
 async function main() {
   await ensureDatabaseReady();
@@ -56,6 +58,8 @@ async function main() {
   await deleteTelegramWebhookIfRequested();
   startTelegramUpdatesPollerIfConfigured();
   startTelegramDailyReportIfConfigured();
+  startContainerStatsPoller(collector.docker, () => collector.getRunningContainers());
+  startUptimeChecker();
 
   server.listen(env.PORT, () => {
     console.log(`Monitor server listening on :${env.PORT}`);

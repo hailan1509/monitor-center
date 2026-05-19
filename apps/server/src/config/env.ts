@@ -78,7 +78,30 @@ const envSchema = z.object({
   TELEGRAM_DELETE_WEBHOOK_ON_START: z
     .string()
     .optional()
-    .transform((value) => value === "true")
+    .transform((value) => value === "true"),
+  /** JSON array: [{"name":"myapp","url":"http://myapp/health","intervalMs":60000,"timeoutMs":10000}] */
+  UPTIME_CHECKS: z
+    .string()
+    .optional()
+    .transform((value) => {
+      if (!value?.trim()) return [] as Array<{ name: string; url: string; intervalMs: number; timeoutMs: number }>;
+      try {
+        const parsed = JSON.parse(value) as Array<{ name: string; url: string; intervalMs?: number; timeoutMs?: number }>;
+        return parsed.map((check) => ({
+          name: check.name,
+          url: check.url,
+          intervalMs: check.intervalMs ?? 60_000,
+          timeoutMs: check.timeoutMs ?? 10_000
+        }));
+      } catch {
+        console.error("[env] UPTIME_CHECKS JSON không hợp lệ, bỏ qua.");
+        return [] as Array<{ name: string; url: string; intervalMs: number; timeoutMs: number }>;
+      }
+    }),
+  /** Ngưỡng memory (%) để gửi alert. Mặc định 90. */
+  CONTAINER_MEMORY_ALERT_THRESHOLD: z.coerce.number().min(50).max(99).default(90),
+  /** Bao lâu poll Docker stats một lần (ms). Mặc định 30s. */
+  CONTAINER_STATS_INTERVAL_MS: z.coerce.number().min(10_000).max(300_000).default(30_000)
 });
 
 export const env = envSchema.parse(process.env);
