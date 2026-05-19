@@ -77,15 +77,9 @@ export function classifySecurityEvent(input: { path?: string; status?: number; u
   if (suspiciousPathPrefixes.some((prefix) => path.startsWith(prefix))) return true;
   if (sensitiveFilePatterns.some((f) => path.includes(f))) return true;
   if (suspiciousUserAgents.some((needle) => ua.includes(needle))) return true;
-  // Binary probes logged by nginx as escaped text (e.g. \x16\x03 for TLS ClientHello,
-  // \x03\x00 for legacy protocol probes). The actual bytes are stripped by normalizeMessage
-  // before this point, so only the escaped-text form is checked here.
-  if (message.includes("\\x16\\x03")) return true;
-  if (message.includes("\\x03\\x00")) return true;
-
-  // HTTP/2 connection preface sent to an HTTP/1.1 server produces a 400 "PRI * HTTP/2.0".
-  // This is a protocol mismatch, not an attack — exclude it from security classification.
-  if (path === "*" && status === 400) return false;
+  // Binary control sequences: TLS ClientHello (\x16\x03) or legacy probes (\x03\x00).
+  if (message.includes("\\x16\\x03") || message.includes("\x16\x03")) return true;
+  if (message.includes("\\x03\\x00") || message.includes("\x03\x00")) return true;
 
   // Consider auth failures and malformed requests as security noise.
   if ([400, 401, 403].includes(status)) return true;
