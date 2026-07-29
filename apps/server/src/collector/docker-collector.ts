@@ -5,7 +5,7 @@ import type { ContainerInfo } from "dockerode";
 import type { LogEvent } from "@monitor-center/shared";
 import { env } from "../config/env.js";
 import { resolveProject } from "../config/project-mappings.js";
-import { insertLog, upsertContainerState } from "../services/log-repository.js";
+import { insertLog, pruneContainerStates, upsertContainerState } from "../services/log-repository.js";
 import { buildFingerprint } from "../services/fingerprint.js";
 import { inferLogLevel, normalizeMessage } from "../services/log-level.js";
 import { classifySecurityEvent, parseNginxAccessLog } from "../services/access-log.js";
@@ -168,6 +168,10 @@ export class DockerCollector {
         this.#containerMeta.delete(id);
       }
     }
+
+    // Xoá luôn các container_id không còn tồn tại trên host khỏi DB — tránh
+    // container "ma" tích tụ mỗi lần một app được rebuild/recreate.
+    await pruneContainerStates(Array.from(seenIds));
 
     this.#initialized = true;
   }

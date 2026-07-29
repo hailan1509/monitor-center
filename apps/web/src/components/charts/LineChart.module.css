@@ -1,0 +1,70 @@
+.wrap {
+  position: relative;
+  width: 100%;
+}
+
+.svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  touch-action: none;
+}
+
+.gridline {
+  stroke: var(--chart-grid);
+  stroke-width: 1;
+}
+
+.baseline {
+  stroke: var(--chart-baseline);
+  stroke-width: 1;
+}
+
+.crosshair {
+  stroke: var(--chart-baseline);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.axisLabel {
+  fill: var(--chart-text-muted);
+  font-size: 11px;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+
+.tooltip {
+  position: absolute;
+  top: 4px;
+  transform: translateX(-50%);
+  min-width: 120px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--chart-tooltip-border);
+  background: var(--chart-tooltip-bg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.tooltipValue {
+  font-weight: 800;
+  font-size: 15px;
+  color: var(--chart-text-primary);
+}
+
+.tooltipMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--chart-text-secondary);
+  white-space: nowrap;
+}
+
+.tooltipKey {
+  display: inline-block;
+  width: 10px;
+  height: 2px;
+  border-radius: 999px;
+}

@@ -1,0 +1,114 @@
+.page {
+  position: relative;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+  padding: 24px;
+}
+
+.themeToggle {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.themeToggle svg {
+  width: 17px;
+  height: 17px;
+}
+
+.card {
+  width: min(380px, 100%);
+  text-align: center;
+}
+
+.mark {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 18px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  font-size: 15px;
+  color: #fff;
+  background: var(--chart-accent);
+}
+
+.title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.subtitle {
+  margin: 8px 0 32px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.form {
+  display: grid;
+  gap: 14px;
+  text-align: left;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.fieldLabel {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.field input {
+  height: 42px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.field input:focus {
+  outline: none;
+  border-color: var(--chart-accent);
+  box-shadow: 0 0 0 3px var(--chart-accent-fill);
+}
+
+.error {
+  font-size: 13px;
+  color: var(--chart-critical);
+}
+
+.submit {
+  height: 42px;
+  border-radius: 10px;
+  border: 0;
+  background: var(--chart-accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  margin-top: 4px;
+}
+
+.submit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

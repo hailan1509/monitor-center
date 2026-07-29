@@ -1,0 +1,86 @@
+.wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.bars {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  padding-bottom: 22px;
+  position: relative;
+}
+
+.baselineLine {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 22px;
+  height: 1px;
+  background: var(--chart-baseline);
+}
+
+.barCol {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  cursor: default;
+  outline: none;
+}
+
+.bar {
+  width: 100%;
+  max-width: 24px;
+  border-radius: 4px 4px 0 0;
+  transition: filter 120ms ease;
+}
+
+.barHover {
+  filter: brightness(1.12);
+}
+
+.label {
+  position: absolute;
+  bottom: -20px;
+  font-size: 11px;
+  color: var(--chart-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.tooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 96px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--chart-tooltip-border);
+  background: var(--chart-tooltip-bg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+  z-index: 5;
+  text-align: center;
+}
+
+.tooltipValue {
+  font-weight: 800;
+  font-size: 14px;
+  color: var(--chart-text-primary);
+}
+
+.tooltipMeta {
+  font-size: 11px;
+  color: var(--chart-text-secondary);
+  white-space: nowrap;
+}

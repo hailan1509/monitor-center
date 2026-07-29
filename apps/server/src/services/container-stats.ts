@@ -12,6 +12,9 @@ export type ContainerStatsSnapshot = {
   memoryUsageBytes: number;
   memoryLimitBytes: number;
   memoryPercent: number;
+  pidsCount: number;
+  networkRxBytes: number;
+  networkTxBytes: number;
   collectedAt: string;
 };
 
@@ -41,7 +44,19 @@ type DockerStatsRaw = {
     limit: number;
     stats?: { cache?: number };
   };
+  pids_stats?: { current?: number };
+  networks?: Record<string, { rx_bytes?: number; tx_bytes?: number }>;
 };
+
+function sumNetworkBytes(raw: DockerStatsRaw): { rxBytes: number; txBytes: number } {
+  let rxBytes = 0;
+  let txBytes = 0;
+  for (const iface of Object.values(raw.networks ?? {})) {
+    rxBytes += iface.rx_bytes ?? 0;
+    txBytes += iface.tx_bytes ?? 0;
+  }
+  return { rxBytes, txBytes };
+}
 
 function calcCpuPercent(raw: DockerStatsRaw): number {
   const cpuDelta = raw.cpu_stats.cpu_usage.total_usage - raw.precpu_stats.cpu_usage.total_usage;
@@ -72,6 +87,7 @@ async function pollOneContainer(
     const raw = (await docker.getContainer(containerId).stats({ stream: false })) as DockerStatsRaw;
     const cpuPercent = calcCpuPercent(raw);
     const { usageBytes, percent: memoryPercent } = calcMemoryPercent(raw);
+    const { rxBytes, txBytes } = sumNetworkBytes(raw);
     const snap: ContainerStatsSnapshot = {
       containerId,
       containerName,
@@ -81,6 +97,9 @@ async function pollOneContainer(
       memoryUsageBytes: usageBytes,
       memoryLimitBytes: raw.memory_stats.limit,
       memoryPercent: Math.round(memoryPercent * 10) / 10,
+      pidsCount: raw.pids_stats?.current ?? 0,
+      networkRxBytes: rxBytes,
+      networkTxBytes: txBytes,
       collectedAt: new Date().toISOString()
     };
     latestStats.set(containerId, snap);

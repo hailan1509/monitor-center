@@ -7,6 +7,8 @@ type User = {
   role: UserRole;
 };
 
+export type TimeseriesBucket = { bucket: string; errorCount: number; warnCount: number };
+
 let pendingRequests = 0;
 const loadingListeners = new Set<() => void>();
 
@@ -70,6 +72,11 @@ export const api = {
       method: "POST"
     }),
   me: () => request<{ user: User | null }>("/api/auth/me"),
+  changePassword: (payload: { currentPassword: string; newPassword: string }) =>
+    request<{ ok: boolean }>("/api/auth/password", {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    }),
   overview: () => request<DashboardSnapshot>("/api/dashboard/overview"),
   securitySummary: () =>
     request<{
@@ -80,6 +87,21 @@ export const api = {
     }>("/api/security/summary"),
   searchLogs: (params: Record<string, string>) =>
     request<{ logs: LogEvent[] }>(`/api/logs/search?${new URLSearchParams(params).toString()}`),
+  securityTimeseries: (params: { hours?: number; bucketMinutes?: number }) => {
+    const query = new URLSearchParams();
+    if (params.hours) query.set("hours", String(params.hours));
+    if (params.bucketMinutes) query.set("bucketMinutes", String(params.bucketMinutes));
+    return request<{ buckets: Array<{ bucket: string; count: number }> }>(`/api/security/timeseries?${query.toString()}`, undefined, {
+      silent: true
+    });
+  },
+  timeseries: (params: { project?: string; hours?: number; bucketMinutes?: number }) => {
+    const query = new URLSearchParams();
+    if (params.project) query.set("project", params.project);
+    if (params.hours) query.set("hours", String(params.hours));
+    if (params.bucketMinutes) query.set("bucketMinutes", String(params.bucketMinutes));
+    return request<{ buckets: TimeseriesBucket[] }>(`/api/logs/timeseries?${query.toString()}`, undefined, { silent: true });
+  },
   purgeLogs: (payload: LogPurgeRequest) =>
     request<{ dryRun: boolean; affected: number }>("/api/logs/purge", {
       method: "POST",
@@ -104,14 +126,30 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload)
     }),
+  updateUser: (id: string, payload: { email?: string; password?: string; displayName?: string; role?: UserRole }) =>
+    request<{ ok: boolean }>(`/api/users/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    }),
   containerStats: () =>
     request<{
       stats: Array<{
         containerId: string; containerName: string; project: string; service: string;
         cpuPercent: number; memoryPercent: number; memoryUsageBytes: number; memoryLimitBytes: number;
+        pidsCount: number; networkRxBytes: number; networkTxBytes: number;
         collectedAt: string;
       }>
     }>("/api/containers/stats"),
+  inspectContainer: (id: string) =>
+    request<{
+      restartCount: number;
+      health: string | null;
+      ports: Array<{ privatePort: number; publicPort: number | null; type: string }>;
+      networkMode: string;
+      command: string;
+    }>(`/api/containers/${encodeURIComponent(id)}/inspect`, undefined, { silent: true }),
+  restartContainer: (id: string) =>
+    request<{ ok: boolean }>(`/api/containers/${encodeURIComponent(id)}/restart`, { method: "POST" }),
   uptimeChecks: () =>
     request<{
       checks: Array<{

@@ -49,11 +49,20 @@ async function main() {
     })
   );
 
-  app.use("/api", createApiRouter());
-
   const server = http.createServer(app);
   const hub = new RealtimeHub(server);
   const collector = new DockerCollector({ hub });
+
+  app.use("/api", createApiRouter({ docker: collector.docker }));
+
+  // Safety net: any error passed to next() (including from async route handlers)
+  // lands here instead of crashing the process via an unhandled rejection.
+  app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
+    console.error("[api] Unhandled request error:", error);
+    if (response.headersSent) return;
+    response.status(500).json({ error: "Internal server error" });
+  });
+
   await collector.start();
   await deleteTelegramWebhookIfRequested();
   startTelegramUpdatesPollerIfConfigured();

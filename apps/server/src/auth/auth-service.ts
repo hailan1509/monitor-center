@@ -63,6 +63,61 @@ export async function listUsers() {
   }));
 }
 
+export async function changePassword(userId: string, currentPassword: string, newPassword: string): Promise<"ok" | "invalid-current"> {
+  const result = await query<{ password_hash: string }>(`SELECT password_hash FROM users WHERE id = $1 LIMIT 1`, [userId]);
+  const row = result.rows[0];
+  if (!row) {
+    return "invalid-current";
+  }
+
+  const valid = await bcrypt.compare(currentPassword, row.password_hash);
+  if (!valid) {
+    return "invalid-current";
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  await query(`UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`, [passwordHash, userId]);
+  return "ok";
+}
+
+/** Admin-initiated edit of another (or their own) user — no current-password check, unlike self-service changePassword. */
+export async function updateUser(
+  id: string,
+  input: { email?: string; displayName?: string; role?: UserRole; password?: string }
+) {
+  const sets: string[] = [];
+  const values: unknown[] = [];
+
+  if (input.email !== undefined) {
+    values.push(input.email);
+    sets.push(`email = $${values.length}`);
+  }
+  if (input.displayName !== undefined) {
+    values.push(input.displayName);
+    sets.push(`display_name = $${values.length}`);
+  }
+  if (input.role !== undefined) {
+    values.push(input.role);
+    sets.push(`role = $${values.length}`);
+  }
+  if (input.password !== undefined) {
+    values.push(await bcrypt.hash(input.password, 10));
+    sets.push(`password_hash = $${values.length}`);
+  }
+
+  if (sets.length === 0) {
+    return;
+  }
+
+  sets.push(`updated_at = NOW()`);
+  values.push(id);
+
+  await query(
+    `UPDATE users SET ${sets.join(", ")} WHERE id = $${values.length}`,
+    values
+  );
+}
+
 export async function createUser(input: { email: string; password: string; displayName: string; role: UserRole }) {
   const passwordHash = await bcrypt.hash(input.password, 10);
   const result = await query<{ id: string }>(

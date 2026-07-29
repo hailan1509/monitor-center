@@ -1,0 +1,287 @@
+.back {
+  display: inline-block;
+  margin-bottom: 20px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.back:hover {
+  color: var(--text);
+}
+
+.heroRow {
+  margin-bottom: 32px;
+}
+
+.heroTitle {
+  margin: 0;
+  font-size: clamp(22px, 3vw, 28px);
+  font-weight: 800;
+  color: var(--text);
+}
+
+.heroSubtitle {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.kpiRow {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 44px;
+}
+
+.kpiTile {
+  background: var(--surface-1);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.kpiLabel {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.kpiValue {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.kpiValueSmall {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.tCritical {
+  color: var(--chart-critical);
+}
+
+.tWarning {
+  color: var(--chart-warning);
+}
+
+.section {
+  margin-bottom: 44px;
+}
+
+.sectionHead {
+  margin-bottom: 14px;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.chartCard {
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-1);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+}
+
+.containerRow,
+.issueRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.statusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: none;
+}
+
+.statusOk {
+  background: var(--chart-good);
+}
+
+.statusMuted {
+  background: var(--muted);
+}
+
+.containerMain {
+  flex: 1;
+  min-width: 0;
+}
+
+.containerName {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.containerMeta {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meters {
+  display: flex;
+  gap: 16px;
+  flex: none;
+}
+
+.meterItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.meterTrack {
+  width: 60px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.meterFill {
+  height: 100%;
+  border-radius: 999px;
+}
+
+.tone-good {
+  background: var(--chart-good);
+}
+
+.tone-warning {
+  background: var(--chart-warning);
+}
+
+.tone-critical {
+  background: var(--chart-critical);
+}
+
+.meterLabel {
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.issueCount {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  flex: none;
+  font-size: 13px;
+}
+
+.issueMessage {
+  color: var(--text);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.levelDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  flex: none;
+}
+
+.level-fatal,
+.level-error {
+  background: var(--chart-critical);
+}
+
+.level-warn {
+  background: var(--chart-warning);
+}
+
+.level-info {
+  background: var(--chart-accent);
+}
+
+.level-debug,
+.level-trace,
+.level-unknown {
+  background: var(--muted);
+}
+
+.tail {
+  display: grid;
+  gap: 2px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-1);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.tailRow {
+  display: grid;
+  grid-template-columns: 60px 10px 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 5px 0;
+}
+
+.tailTime {
+  color: var(--muted);
+}
+
+.tailMessage {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty {
+  padding: 20px 4px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .kpiRow {
+    grid-template-columns: 1fr;
+  }
+
+  .containerRow {
+    flex-wrap: wrap;
+  }
+
+  .meters {
+    width: 100%;
+    justify-content: space-between;
+  }
+}

@@ -121,6 +121,16 @@ export async function upsertContainerState(input: {
   );
 }
 
+/** Removes container_state rows for containers no longer seen on the host (e.g. after a rebuild/recreate
+    assigns a new container_id) — otherwise dead containers pile up forever since upsert only adds/updates. */
+export async function pruneContainerStates(activeContainerIds: string[]) {
+  if (activeContainerIds.length === 0) {
+    await query(`DELETE FROM container_state`);
+    return;
+  }
+  await query(`DELETE FROM container_state WHERE container_id <> ALL($1::text[])`, [activeContainerIds]);
+}
+
 export async function searchLogs(filters: SearchFilters) {
   const clauses: string[] = [];
   const values: unknown[] = [];
@@ -260,6 +270,8 @@ export async function getOverview() {
         MAX(message) AS sample_message
       FROM logs
       WHERE timestamp >= NOW() - INTERVAL '24 HOURS'
+        AND level IN ('warn', 'error', 'fatal')
+        AND (metadata->>'category') IS DISTINCT FROM 'security'
       GROUP BY fingerprint, project, service
       ORDER BY count DESC, last_seen_at DESC
       LIMIT 20
@@ -333,6 +345,86 @@ export async function getOverview() {
       metadata: row.metadata
     }))
   };
+}
+
+export type TimeseriesBucket = { bucket: string; errorCount: number; warnCount: number };
+
+/** Bucketed error/warn counts over the trailing window — powers trend charts. No schema change: reads the existing `logs` table. */
+export async function getErrorTimeseries(input: { project?: string; hours: number; bucketMinutes: number }): Promise<TimeseriesBucket[]> {
+  const bucketSeconds = input.bucketMinutes * 60;
+  const clauses: string[] = [`timestamp >= NOW() - ($1 || ' hours')::interval`];
+  const values: unknown[] = [input.hours];
+
+  if (input.project) {
+    values.push(input.project);
+    clauses.push(`project = $${values.length}`);
+  }
+
+  values.push(bucketSeconds);
+  const bucketParamIndex = values.length;
+
+  const result = await query<{ bucket: Date; error_count: string; warn_count: string }>(
+    `
+    SELECT
+      to_timestamp(floor(extract(epoch FROM timestamp) / $${bucketParamIndex}) * $${bucketParamIndex}) AS bucket,
+      COUNT(*) FILTER (WHERE level IN ('error', 'fatal'))::int AS error_count,
+      COUNT(*) FILTER (WHERE level = 'warn')::int AS warn_count
+    FROM logs
+    WHERE ${clauses.join(" AND ")}
+    GROUP BY bucket
+    ORDER BY bucket ASC
+    `,
+    values
+  );
+
+  const byBucket = new Map(result.rows.map((row) => [row.bucket.toISOString(), row]));
+
+  // Fill gaps so the chart line doesn't skip silent buckets.
+  const buckets: TimeseriesBucket[] = [];
+  const now = Date.now();
+  const start = Math.floor((now - input.hours * 60 * 60 * 1000) / (bucketSeconds * 1000)) * bucketSeconds * 1000;
+  for (let t = start; t <= now; t += bucketSeconds * 1000) {
+    const iso = new Date(t).toISOString();
+    const row = byBucket.get(iso);
+    buckets.push({
+      bucket: iso,
+      errorCount: row ? Number(row.error_count) : 0,
+      warnCount: row ? Number(row.warn_count) : 0
+    });
+  }
+
+  return buckets;
+}
+
+/** Bucketed security-event counts over the trailing window — same bucketing approach as getErrorTimeseries. */
+export async function getSecurityTimeseries(input: { hours: number; bucketMinutes: number }): Promise<Array<{ bucket: string; count: number }>> {
+  const bucketSeconds = input.bucketMinutes * 60;
+
+  const result = await query<{ bucket: Date; count: string }>(
+    `
+    SELECT
+      to_timestamp(floor(extract(epoch FROM timestamp) / $2) * $2) AS bucket,
+      COUNT(*)::int AS count
+    FROM logs
+    WHERE timestamp >= NOW() - ($1 || ' hours')::interval
+      AND (metadata->>'category') = 'security'
+    GROUP BY bucket
+    ORDER BY bucket ASC
+    `,
+    [input.hours, bucketSeconds]
+  );
+
+  const byBucket = new Map(result.rows.map((row) => [row.bucket.toISOString(), Number(row.count)]));
+
+  const buckets: Array<{ bucket: string; count: number }> = [];
+  const now = Date.now();
+  const start = Math.floor((now - input.hours * 60 * 60 * 1000) / (bucketSeconds * 1000)) * bucketSeconds * 1000;
+  for (let t = start; t <= now; t += bucketSeconds * 1000) {
+    const iso = new Date(t).toISOString();
+    buckets.push({ bucket: iso, count: byBucket.get(iso) ?? 0 });
+  }
+
+  return buckets;
 }
 
 export async function getSecuritySummary() {
@@ -544,6 +636,8 @@ export async function getLogDigestForRange(startIso: string, endIso: string): Pr
       FROM logs
       WHERE timestamp >= $1::timestamptz
         AND timestamp < $2::timestamptz
+        AND level IN ('warn', 'error', 'fatal')
+        AND (metadata->>'category') IS DISTINCT FROM 'security'
       GROUP BY fingerprint, project, service
       ORDER BY count DESC, MAX(timestamp) DESC
       LIMIT 8

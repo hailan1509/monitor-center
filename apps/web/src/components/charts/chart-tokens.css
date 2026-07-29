@@ -1,0 +1,38 @@
+/* Chart chrome & status tokens — validated palette (see dataviz skill references/palette.md).
+   Keyed off the app's existing [data-theme] toggle, not a separate light/dark system. */
+
+:root,
+[data-theme="dark"] {
+  --chart-text-primary: #ffffff;
+  --chart-text-secondary: #c3c2b7;
+  --chart-text-muted: #898781;
+  --chart-grid: #2c2c2a;
+  --chart-baseline: #383835;
+  --chart-accent: #3987e5;
+  --chart-accent-fill: rgba(57, 135, 229, 0.12);
+  --chart-good: #0ca30c;
+  --chart-warning: #fab219;
+  --chart-serious: #ec835a;
+  --chart-critical: #e66767;
+  --chart-tooltip-bg: #111827;
+  --chart-tooltip-border: rgba(255, 255, 255, 0.12);
+}
+
+[data-theme="light"] {
+  --chart-text-primary: #0b0b0b;
+  --chart-text-secondary: #52514e;
+  --chart-text-muted: #898781;
+  --chart-grid: #e1e0d9;
+  --chart-baseline: #c3c2b7;
+  --chart-accent: #2a78d6;
+  --chart-accent-fill: rgba(42, 120, 214, 0.1);
+  /* Status hexes are fixed across themes per the validated palette (not re-themed).
+     warning/serious sit below 3:1 on the light surface by design — always pair
+     them with an icon + text label, never color alone. */
+  --chart-good: #0ca30c;
+  --chart-warning: #fab219;
+  --chart-serious: #ec835a;
+  --chart-critical: #d03b3b;
+  --chart-tooltip-bg: #ffffff;
+  --chart-tooltip-border: rgba(11, 11, 11, 0.1);
+}
