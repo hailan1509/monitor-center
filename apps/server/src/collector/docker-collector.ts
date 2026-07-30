@@ -268,7 +268,9 @@ export class DockerCollector {
           this.#hub.broadcastLog(log);
           void telegramErrorAlerter.maybeSend(log);
 
-          if (level === "error" || level === "fatal") {
+          // Scanner/bot bursts (security category) shouldn't count toward the app error-rate
+          // spike detector — a wave of blocked probes isn't the same signal as a real error spike.
+          if ((level === "error" || level === "fatal") && category !== "security") {
             const spike = spikeDetector.record(project, service);
             if (spike.isSpike) {
               void sendSpikeAlert(project, service, spike);
