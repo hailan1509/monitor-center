@@ -111,40 +111,9 @@ export async function answerLogQuestion(input: {
   const userTurnText = `Question: ${input.question}\n\nContext logs:\n${contextText}`;
   const history = input.history ?? [];
 
-  if (anthropicClient) {
-    try {
-      const response = await withTimeout(
-        anthropicClient.messages.create({
-          model: env.ANTHROPIC_MODEL,
-          max_tokens: env.ANTHROPIC_MAX_OUTPUT_TOKENS,
-          system: systemText,
-          messages: [...history.map((turn) => ({ role: turn.role, content: turn.text })), { role: "user" as const, content: userTurnText }]
-        }),
-        env.AI_TIMEOUT_MS,
-        "Claude"
-      );
-
-      if (response.stop_reason === "refusal") {
-        return {
-          answer: "Claude từ chối trả lời câu hỏi này. Hãy thử diễn đạt lại câu hỏi.",
-          context: summary
-        };
-      }
-
-      const textBlock = response.content.find((block): block is Anthropic.TextBlock => block.type === "text");
-      return {
-        answer: textBlock?.text ?? "",
-        context: summary
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      return {
-        answer: `Không gọi được Claude lúc này. Lý do: ${message}`,
-        context: summary
-      };
-    }
-  }
-
+  // Gemini is primary (free-tier friendly for a low-volume internal tool). Claude is a paid
+  // fallback — only used when ANTHROPIC_API_KEY is explicitly set, since the Claude API bills
+  // separately from a claude.ai Pro/Max subscription and this tool defaults to the free option.
   if (geminiClient) {
     try {
       const model = geminiClient.getGenerativeModel({
@@ -182,15 +151,49 @@ export async function answerLogQuestion(input: {
     }
   }
 
+  if (anthropicClient) {
+    try {
+      const response = await withTimeout(
+        anthropicClient.messages.create({
+          model: env.ANTHROPIC_MODEL,
+          max_tokens: env.ANTHROPIC_MAX_OUTPUT_TOKENS,
+          system: systemText,
+          messages: [...history.map((turn) => ({ role: turn.role, content: turn.text })), { role: "user" as const, content: userTurnText }]
+        }),
+        env.AI_TIMEOUT_MS,
+        "Claude"
+      );
+
+      if (response.stop_reason === "refusal") {
+        return {
+          answer: "Claude từ chối trả lời câu hỏi này. Hãy thử diễn đạt lại câu hỏi.",
+          context: summary
+        };
+      }
+
+      const textBlock = response.content.find((block): block is Anthropic.TextBlock => block.type === "text");
+      return {
+        answer: textBlock?.text ?? "",
+        context: summary
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      return {
+        answer: `Không gọi được Claude lúc này. Lý do: ${message}`,
+        context: summary
+      };
+    }
+  }
+
   if (!openaiClient) {
     return {
       answer:
-        "Chưa cấu hình AI key. Hãy set ANTHROPIC_API_KEY (khuyến nghị), GEMINI_API_KEY, hoặc OPENAI_API_KEY để bật AI assistant.",
+        "Chưa cấu hình AI key. Hãy set GEMINI_API_KEY (khuyến nghị, miễn phí), ANTHROPIC_API_KEY, hoặc OPENAI_API_KEY để bật AI assistant.",
       context: summary
     };
   }
 
-  // OpenAI is the last-resort fallback (after Claude and Gemini); kept single-turn for
+  // OpenAI is the last-resort fallback (after Gemini and Claude); kept single-turn for
   // simplicity — multi-turn is covered by the two higher-priority providers above.
   try {
     const response = await withTimeout(
