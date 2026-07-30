@@ -5,6 +5,10 @@ import {
   upsertTelegramReportSubscriber
 } from "./telegram-subscribers.js";
 import { handleTelegramChat } from "./telegram-chat-handler.js";
+import { runAlertAiAnalysis } from "./telegram-error-alerts.js";
+import { silenceManager } from "./silence-manager.js";
+
+const SILENCE_DURATION_MS = 60 * 60 * 1000;
 
 type TelegramChat = {
   id: number;
@@ -27,10 +31,17 @@ type IncomingMessage = {
   text?: string;
 };
 
+type CallbackQuery = {
+  id: string;
+  data?: string;
+  message?: { chat?: TelegramChat };
+};
+
 type TelegramUpdate = {
   update_id: number;
   message?: IncomingMessage;
   edited_message?: IncomingMessage;
+  callback_query?: CallbackQuery;
 };
 
 type GetUpdatesResponse = {
@@ -58,6 +69,54 @@ async function telegramApi(token: string, method: string, params: Record<string,
     body
   });
   return response.json() as Promise<{ ok: boolean; description?: string; result?: unknown }>;
+}
+
+async function answerCallbackQuery(token: string, callbackQueryId: string, text: string) {
+  await telegramApi(token, "answerCallbackQuery", { callback_query_id: callbackQueryId, text });
+}
+
+async function sendPlainMessage(token: string, chatId: string, text: string) {
+  await telegramApi(token, "sendMessage", { chat_id: chatId, text });
+}
+
+/** callback_data encodes "action:project:service" (service may itself contain ":" so it's not re-split). */
+async function handleCallbackQuery(token: string, query: CallbackQuery) {
+  const chatId = query.message?.chat?.id;
+  const data = query.data ?? "";
+  const separatorIndex1 = data.indexOf(":");
+  const separatorIndex2 = data.indexOf(":", separatorIndex1 + 1);
+  if (chatId == null || separatorIndex1 === -1 || separatorIndex2 === -1) {
+    await answerCallbackQuery(token, query.id, "Không xử lý được yêu cầu.");
+    return;
+  }
+
+  const action = data.slice(0, separatorIndex1);
+  const project = data.slice(separatorIndex1 + 1, separatorIndex2);
+  const service = data.slice(separatorIndex2 + 1);
+
+  if (action === "silence") {
+    silenceManager.silence(project, service, SILENCE_DURATION_MS);
+    await answerCallbackQuery(token, query.id, "Đã im lặng 1h");
+    await sendPlainMessage(token, String(chatId), `🔇 Đã tắt alert cho ${project} / ${service} trong 1 giờ.`);
+    return;
+  }
+
+  if (action === "aidetail") {
+    await answerCallbackQuery(token, query.id, "Đang phân tích, chờ chút...");
+    const analysis = await runAlertAiAnalysis(
+      project,
+      service,
+      `Hãy phân tích sâu hơn tình trạng gần đây của ${project} / ${service}: nguyên nhân gốc rễ khả dĩ, mức độ ảnh hưởng, và bước kiểm tra/khắc phục tiếp theo.`
+    );
+    await sendPlainMessage(
+      token,
+      String(chatId),
+      analysis ? `🤖 Phân tích sâu — ${project} / ${service}:\n${analysis}` : "❌ Không phân tích được lúc này, thử lại sau."
+    );
+    return;
+  }
+
+  await answerCallbackQuery(token, query.id, "Hành động không hợp lệ.");
 }
 
 export async function deleteTelegramWebhookIfRequested() {
@@ -108,6 +167,12 @@ export async function ingestTelegramUpdatesOnce(token: string): Promise<void> {
     let maxId = 0;
     for (const update of data.result ?? []) {
       maxId = Math.max(maxId, update.update_id);
+
+      if (update.callback_query) {
+        void handleCallbackQuery(token, update.callback_query);
+        continue;
+      }
+
       const payload = update.message ?? update.edited_message;
       const chat = payload?.chat;
       if (!chat?.id || chat.type !== "private") {

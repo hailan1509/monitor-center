@@ -10,6 +10,7 @@
     "telegram:digest": "node ../../node_modules/tsx/dist/cli.mjs src/scripts/send-telegram-digest.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
     "@google/generative-ai": "^0.24.1",
     "@monitor-center/shared": "file:../../packages/shared",
     "bcryptjs": "^2.4.3",

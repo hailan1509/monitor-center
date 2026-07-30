@@ -1,3 +1,4 @@
+import type { ChatTurn } from "@monitor-center/shared";
 import { env } from "../config/env.js";
 import { answerLogQuestion } from "./assistant-service.js";
 import { getLatestStats } from "./container-stats.js";
@@ -6,6 +7,27 @@ import { getUptimeStatuses } from "./uptime-checker.js";
 const COOLDOWN_MS = 5_000;
 const lastHandledAt = new Map<string, number>();
 const pendingChats = new Set<string>();
+
+// Per-chat conversation memory so follow-up questions ("còn container kia thì sao?")
+// carry context. Bounded by turn count and reset after inactivity to avoid unbounded growth.
+const CHAT_HISTORY_MAX_TURNS = 12;
+const CHAT_HISTORY_IDLE_RESET_MS = 30 * 60 * 1000;
+const chatHistories = new Map<string, { turns: ChatTurn[]; updatedAt: number }>();
+
+function getChatHistory(chatId: string): ChatTurn[] {
+  const entry = chatHistories.get(chatId);
+  if (!entry) return [];
+  if (Date.now() - entry.updatedAt > CHAT_HISTORY_IDLE_RESET_MS) {
+    chatHistories.delete(chatId);
+    return [];
+  }
+  return entry.turns;
+}
+
+function appendChatHistory(chatId: string, question: string, answer: string) {
+  const turns = [...getChatHistory(chatId), { role: "user" as const, text: question }, { role: "assistant" as const, text: answer }];
+  chatHistories.set(chatId, { turns: turns.slice(-CHAT_HISTORY_MAX_TURNS), updatedAt: Date.now() });
+}
 
 function chunkText(text: string, max = 3900) {
   const chunks: string[] = [];
@@ -62,6 +84,12 @@ export async function handleTelegramChat(chatId: string, text: string): Promise<
   if (now - (lastHandledAt.get(chatId) ?? 0) < COOLDOWN_MS) return;
   lastHandledAt.set(chatId, now);
 
+  if (text.trim() === "/new" || text.trim() === "/reset") {
+    chatHistories.delete(chatId);
+    await sendReply(chatId, "🔄 Đã bắt đầu cuộc hội thoại mới.");
+    return;
+  }
+
   if (pendingChats.has(chatId)) {
     await sendReply(chatId, "⏳ Đang xử lý câu hỏi trước, vui lòng đợi...");
     return;
@@ -76,6 +104,7 @@ export async function handleTelegramChat(chatId: string, text: string): Promise<
 
   try {
     const systemContext = buildSystemContext();
+    const history = getChatHistory(chatId);
 
     const result = await answerLogQuestion({
       question: text,
@@ -83,9 +112,11 @@ export async function handleTelegramChat(chatId: string, text: string): Promise<
         "Bạn là trợ lý giám sát hệ thống server. Trả lời bằng tiếng Việt, ngắn gọn và rõ ràng. " +
         "Dựa vào dữ liệu log và thông tin hệ thống được cung cấp. " +
         "Nếu không có đủ thông tin, hãy nói rõ. Không bịa đặt.",
-      extraContext: systemContext
+      extraContext: systemContext,
+      history
     });
 
+    appendChatHistory(chatId, text, result.answer);
     await sendReply(chatId, result.answer);
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";

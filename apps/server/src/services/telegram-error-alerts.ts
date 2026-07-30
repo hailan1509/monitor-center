@@ -3,6 +3,9 @@ import { env } from "../config/env.js";
 import { listTelegramReportChatIds } from "./telegram-subscribers.js";
 import { silenceManager } from "./silence-manager.js";
 import type { SpikeResult } from "./spike-detector.js";
+import { answerLogQuestion } from "./assistant-service.js";
+
+export type InlineKeyboardButton = { text: string; callback_data: string };
 
 type AlertLog = LogEvent & { fingerprint?: string };
 
@@ -25,15 +28,19 @@ async function resolveRecipientChatIds(): Promise<string[]> {
   return [...new Set([...fromDb, ...fromEnv])];
 }
 
-async function sendTelegramText(token: string, chatId: string, text: string) {
-  for (const part of chunkText(text)) {
+async function sendTelegramText(token: string, chatId: string, text: string, buttons?: InlineKeyboardButton[][]) {
+  const parts = chunkText(text);
+  for (let i = 0; i < parts.length; i++) {
+    // Buttons only make sense attached to the final chunk (the one the user reads last).
+    const isLast = i === parts.length - 1;
     const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         chat_id: chatId,
-        text: part,
-        disable_web_page_preview: true
+        text: parts[i],
+        disable_web_page_preview: true,
+        ...(isLast && buttons ? { reply_markup: { inline_keyboard: buttons } } : {})
       })
     });
 
@@ -44,7 +51,7 @@ async function sendTelegramText(token: string, chatId: string, text: string) {
   }
 }
 
-export async function broadcastText(text: string): Promise<void> {
+export async function broadcastText(text: string, buttons?: InlineKeyboardButton[][]): Promise<void> {
   const token = env.TELEGRAM_BOT_TOKEN;
   if (!token) return;
 
@@ -54,7 +61,7 @@ export async function broadcastText(text: string): Promise<void> {
   const errors: string[] = [];
   for (const chatId of chatIds) {
     try {
-      await sendTelegramText(token, chatId, text);
+      await sendTelegramText(token, chatId, text, buttons);
     } catch (error) {
       errors.push(`${chatId}: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -63,6 +70,22 @@ export async function broadcastText(text: string): Promise<void> {
     console.error(`[telegram] Alert failed for all chats (${chatIds.length}): ${errors.join(" | ")}`);
   } else if (errors.length) {
     console.warn(`[telegram] Alert failed for ${errors.length}/${chatIds.length} chat(s): ${errors.join(" | ")}`);
+  }
+}
+
+/** Best-effort AI root-cause analysis for an alert; returns null on failure so alert delivery is never blocked by it. */
+export async function runAlertAiAnalysis(project: string, service: string, question: string): Promise<string | null> {
+  try {
+    const result = await answerLogQuestion({
+      project,
+      question,
+      systemPrompt:
+        "Bạn là trợ lý giám sát hệ thống server. Dựa vào log được cung cấp, phân tích nguyên nhân khả dĩ, mức độ ảnh hưởng, " +
+        "và đề xuất bước kiểm tra tiếp theo. Trả lời bằng tiếng Việt, ngắn gọn theo gạch đầu dòng, tối đa ~6 dòng."
+    });
+    return result.answer || null;
+  } catch {
+    return null;
   }
 }
 
@@ -175,7 +198,24 @@ export async function sendCrashAlert(info: CrashInfo): Promise<void> {
     `⚠️  ${exitLabel}`
   ];
 
-  void broadcastText(lines.join("\n"));
+  void broadcastText(lines.join("\n"), [
+    [
+      { text: "🔇 Im lặng 1h", callback_data: `silence:${info.project}:${info.service}` },
+      { text: "🤖 Phân tích sâu hơn", callback_data: `aidetail:${info.project}:${info.service}` }
+    ]
+  ]);
+
+  // AI root-cause analysis runs after the base alert so delivery isn't delayed by the AI call.
+  void (async () => {
+    const analysis = await runAlertAiAnalysis(
+      info.project,
+      info.service,
+      `Container ${info.containerName} (service ${info.service}) vừa crash, ${exitLabel}. Dựa vào log gần nhất, nguyên nhân khả dĩ là gì?`
+    );
+    if (analysis) {
+      void broadcastText(`🤖 Phân tích AI — ${info.project} / ${info.service}:\n${analysis}`);
+    }
+  })();
 }
 
 // ─── Spike alert ──────────────────────────────────────────────────────────────
@@ -200,5 +240,22 @@ export async function sendSpikeAlert(
     `⚡ ${spike.recentCount} errors trong 5 phút (${baselineLabel})`
   ];
 
-  void broadcastText(lines.join("\n"));
+  void broadcastText(lines.join("\n"), [
+    [
+      { text: "🔇 Im lặng 1h", callback_data: `silence:${project}:${service}` },
+      { text: "🤖 Phân tích sâu hơn", callback_data: `aidetail:${project}:${service}` }
+    ]
+  ]);
+
+  // AI root-cause analysis runs after the base alert so delivery isn't delayed by the AI call.
+  void (async () => {
+    const analysis = await runAlertAiAnalysis(
+      project,
+      service,
+      `Vừa phát hiện error spike: ${spike.recentCount} lỗi trong 5 phút (${baselineLabel}). Dựa vào log gần nhất, nguyên nhân khả dĩ là gì?`
+    );
+    if (analysis) {
+      void broadcastText(`🤖 Phân tích AI — ${project} / ${service}:\n${analysis}`);
+    }
+  })();
 }

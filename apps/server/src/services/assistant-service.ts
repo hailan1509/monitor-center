@@ -1,10 +1,15 @@
+import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import OpenAI from "openai";
+import type { ChatTurn } from "@monitor-center/shared";
 import { env } from "../config/env.js";
 import { searchLogs } from "./log-repository.js";
 
-const openaiClient = env.OPENAI_API_KEY ? new OpenAI({ apiKey: env.OPENAI_API_KEY }) : null;
+const anthropicClient = env.ANTHROPIC_API_KEY ? new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }) : null;
 const geminiClient = env.GEMINI_API_KEY ? new GoogleGenerativeAI(env.GEMINI_API_KEY) : null;
+const openaiClient = env.OPENAI_API_KEY ? new OpenAI({ apiKey: env.OPENAI_API_KEY }) : null;
+
+export type { ChatTurn };
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
   return Promise.race([
@@ -43,6 +48,8 @@ export async function answerLogQuestion(input: {
   end?: string;
   systemPrompt?: string;
   extraContext?: string;
+  /** Prior turns in this conversation, oldest first — enables multi-turn follow-up questions. */
+  history?: ChatTurn[];
 }) {
   const now = new Date();
   const since24h = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
@@ -99,6 +106,45 @@ export async function answerLogQuestion(input: {
     input.systemPrompt ??
     "You are an internal observability assistant. Answer using only the provided log context. If evidence is weak, say so. Highlight likely root causes, impacted service, and recommended next checks.";
 
+  // Log context is only attached to the newest turn — prior Q&A in `history` already
+  // carries its own answer, so we don't want to re-paste hundreds of log lines every turn.
+  const userTurnText = `Question: ${input.question}\n\nContext logs:\n${contextText}`;
+  const history = input.history ?? [];
+
+  if (anthropicClient) {
+    try {
+      const response = await withTimeout(
+        anthropicClient.messages.create({
+          model: env.ANTHROPIC_MODEL,
+          max_tokens: env.ANTHROPIC_MAX_OUTPUT_TOKENS,
+          system: systemText,
+          messages: [...history.map((turn) => ({ role: turn.role, content: turn.text })), { role: "user" as const, content: userTurnText }]
+        }),
+        env.AI_TIMEOUT_MS,
+        "Claude"
+      );
+
+      if (response.stop_reason === "refusal") {
+        return {
+          answer: "Claude từ chối trả lời câu hỏi này. Hãy thử diễn đạt lại câu hỏi.",
+          context: summary
+        };
+      }
+
+      const textBlock = response.content.find((block): block is Anthropic.TextBlock => block.type === "text");
+      return {
+        answer: textBlock?.text ?? "",
+        context: summary
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      return {
+        answer: `Không gọi được Claude lúc này. Lý do: ${message}`,
+        context: summary
+      };
+    }
+  }
+
   if (geminiClient) {
     try {
       const model = geminiClient.getGenerativeModel({
@@ -106,18 +152,14 @@ export async function answerLogQuestion(input: {
         systemInstruction: systemText
       });
 
+      const historyContents = history.map((turn) => ({
+        role: turn.role === "assistant" ? "model" : "user",
+        parts: [{ text: turn.text }]
+      }));
+
       const result = await withTimeout(
         model.generateContent({
-          contents: [
-            {
-              role: "user",
-              parts: [
-                {
-                  text: `Question: ${input.question}\n\nContext logs:\n${contextText}`
-                }
-              ]
-            }
-          ],
+          contents: [...historyContents, { role: "user", parts: [{ text: userTurnText }] }],
           generationConfig: {
             temperature: 0.2,
             maxOutputTokens: env.GEMINI_MAX_OUTPUT_TOKENS
@@ -143,11 +185,13 @@ export async function answerLogQuestion(input: {
   if (!openaiClient) {
     return {
       answer:
-        "Chưa cấu hình AI key. Hãy set GEMINI_API_KEY (khuyến nghị) hoặc OPENAI_API_KEY để bật AI assistant.",
+        "Chưa cấu hình AI key. Hãy set ANTHROPIC_API_KEY (khuyến nghị), GEMINI_API_KEY, hoặc OPENAI_API_KEY để bật AI assistant.",
       context: summary
     };
   }
 
+  // OpenAI is the last-resort fallback (after Claude and Gemini); kept single-turn for
+  // simplicity — multi-turn is covered by the two higher-priority providers above.
   try {
     const response = await withTimeout(
       openaiClient.responses.create({
@@ -167,7 +211,7 @@ export async function answerLogQuestion(input: {
             content: [
               {
                 type: "input_text",
-                text: `Question: ${input.question}\n\nContext logs:\n${contextText}`
+                text: userTurnText
               }
             ]
           }

@@ -69,11 +69,18 @@ export const searchQuerySchema = z.object({
   limit: z.coerce.number().min(1).max(500).default(100)
 });
 
+export const chatTurnSchema = z.object({
+  role: z.enum(["user", "assistant"]),
+  text: z.string()
+});
+
 export const assistantRequestSchema = z.object({
   question: z.string().min(3),
   project: z.string().optional(),
   start: z.string().optional(),
-  end: z.string().optional()
+  end: z.string().optional(),
+  /** Prior turns in this conversation, oldest first — enables multi-turn follow-up questions. */
+  history: z.array(chatTurnSchema).max(20).optional()
 });
 
 export const logPurgeRequestSchema = z
@@ -101,6 +108,7 @@ export type ProjectSummary = z.infer<typeof projectSummarySchema>;
 export type DashboardSnapshot = z.infer<typeof dashboardSnapshotSchema>;
 export type SearchQuery = z.infer<typeof searchQuerySchema>;
 export type AssistantRequest = z.infer<typeof assistantRequestSchema>;
+export type ChatTurn = z.infer<typeof chatTurnSchema>;
 export type LogPurgeRequest = z.infer<typeof logPurgeRequestSchema>;
 
 export const DEFAULT_PROJECT_MAPPINGS = [

@@ -73,6 +73,29 @@
   cursor: default;
 }
 
+.actionsRow {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.secondaryButton {
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.secondaryButton:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .tip {
   margin-top: 14px;
   font-size: 12px;
@@ -92,11 +115,49 @@
   margin: 4px 0 10px;
 }
 
-.answer {
-  margin: 0;
+.thread {
   min-height: 260px;
+  max-height: 60vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.empty {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.turnUser,
+.turnAssistant {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  max-width: 92%;
+}
+
+.turnUser {
+  align-self: flex-end;
+  background: var(--surface-2);
+}
+
+.turnAssistant {
+  align-self: flex-start;
+  background: var(--surface-1);
+}
+
+.turnRole {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.turnText {
   white-space: pre-wrap;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 13px;
   line-height: 1.55;
   color: var(--text);
