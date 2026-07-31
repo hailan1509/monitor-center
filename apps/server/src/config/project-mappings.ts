@@ -11,6 +11,10 @@ export const projectMappings: ProjectMapping[] = [
   {
     project: "infra",
     matchers: ["nginx-proxy-manager", "mysql_server"]
+  },
+  {
+    project: "omniroute",
+    matchers: ["omniroute"]
   }
 ];
 

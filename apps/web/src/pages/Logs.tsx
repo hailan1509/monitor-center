@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { LogEvent } from "@monitor-center/shared";
 import { api } from "../lib/api";
@@ -24,13 +24,18 @@ export function Logs() {
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [selected, setSelected] = useState<LogEvent | null>(null);
+  const [knownProjects, setKnownProjects] = useState<string[]>([]);
+
+  useEffect(() => {
+    void api.overview().then((r) => setKnownProjects(r.projects.map((p) => p.project)));
+  }, []);
 
   const projects = useMemo(() => {
-    const set = new Set<string>();
+    const set = new Set<string>(knownProjects);
     for (const log of liveLogs) set.add(log.project);
     for (const log of results) set.add(log.project);
     return Array.from(set).sort();
-  }, [liveLogs, results]);
+  }, [knownProjects, liveLogs, results]);
 
   async function runSearch(before?: string) {
     setLoading(true);
