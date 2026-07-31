@@ -80,7 +80,10 @@ export const assistantRequestSchema = z.object({
   start: z.string().optional(),
   end: z.string().optional(),
   /** Prior turns in this conversation, oldest first — enables multi-turn follow-up questions. */
-  history: z.array(chatTurnSchema).max(20).optional()
+  history: z.array(chatTurnSchema).max(20).optional(),
+  /** "cheap" (default) tries free/low-cost providers first; "strong" promotes the paid Claude
+   * model to the front, for deliberate incident investigation instead of routine questions. */
+  tier: z.enum(["cheap", "strong"]).optional()
 });
 
 export const logPurgeRequestSchema = z

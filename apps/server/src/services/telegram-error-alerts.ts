@@ -81,7 +81,9 @@ export async function runAlertAiAnalysis(project: string, service: string, quest
       question,
       systemPrompt:
         "Bạn là trợ lý giám sát hệ thống server. Dựa vào log được cung cấp, phân tích nguyên nhân khả dĩ, mức độ ảnh hưởng, " +
-        "và đề xuất bước kiểm tra tiếp theo. Trả lời bằng tiếng Việt, ngắn gọn theo gạch đầu dòng, tối đa ~6 dòng."
+        "và đề xuất bước kiểm tra tiếp theo. Trả lời bằng tiếng Việt, ngắn gọn theo gạch đầu dòng, tối đa ~6 dòng.",
+      // Crash/spike alerts are an actual incident moment — worth the paid Claude model first.
+      tier: "strong"
     });
     return result.answer || null;
   } catch {

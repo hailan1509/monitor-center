@@ -56,6 +56,9 @@ export async function answerLogQuestion(input: {
   extraContext?: string;
   /** Prior turns in this conversation, oldest first — enables multi-turn follow-up questions. */
   history?: ChatTurn[];
+  /** "cheap" (default) tries free/low-cost providers first; "strong" promotes the paid Claude
+   * model to the front, for deliberate incident investigation instead of routine questions. */
+  tier?: "cheap" | "strong";
 }) {
   const now = new Date();
   const since24h = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
@@ -117,14 +120,16 @@ export async function answerLogQuestion(input: {
   const userTurnText = `Question: ${input.question}\n\nContext logs:\n${contextText}`;
   const history = input.history ?? [];
 
-  // Ordered attempts: Gemini (free, primary) → OmniRoute free-tier gateway (opencode/mistral/
-  // pollinations, no cost) → Claude (paid, opt-in) → OpenAI (paid, last resort). Each tier is
-  // only attempted if configured, and a failure falls through to the next tier instead of
-  // failing the whole request.
-  const attempts: Array<{ label: string; run: () => Promise<string> }> = [];
+  // Each provider attempt is only attempted if configured, and a failure falls through to the
+  // next one instead of failing the whole request. Order depends on `tier` (see below).
+  type Attempt = { label: string; run: () => Promise<string> };
+  let geminiAttempt: Attempt | null = null;
+  const omnirouteAttempts: Attempt[] = [];
+  let anthropicAttempt: Attempt | null = null;
+  let openaiAttempt: Attempt | null = null;
 
   if (geminiClient) {
-    attempts.push({
+    geminiAttempt = {
       label: "Gemini",
       run: async () => {
         const model = geminiClient.getGenerativeModel({
@@ -151,12 +156,12 @@ export async function answerLogQuestion(input: {
 
         return result.response.text();
       }
-    });
+    };
   }
 
   if (omnirouteClient) {
     for (const model of env.OMNIROUTE_FREE_MODELS) {
-      attempts.push({
+      omnirouteAttempts.push({
         label: `OmniRoute(${model})`,
         run: async () => {
           const response = await withTimeout(
@@ -184,7 +189,7 @@ export async function answerLogQuestion(input: {
   }
 
   if (anthropicClient) {
-    attempts.push({
+    anthropicAttempt = {
       label: "Claude",
       run: async () => {
         const response = await withTimeout(
@@ -205,11 +210,11 @@ export async function answerLogQuestion(input: {
         const textBlock = response.content.find((block): block is Anthropic.TextBlock => block.type === "text");
         return textBlock?.text ?? "";
       }
-    });
+    };
   }
 
   if (openaiClient) {
-    attempts.push({
+    openaiAttempt = {
       label: "OpenAI",
       run: async () => {
         const response = await withTimeout(
@@ -232,8 +237,16 @@ export async function answerLogQuestion(input: {
 
         return response.output_text;
       }
-    });
+    };
   }
+
+  // "cheap" (default, for routine/frequent calls): Gemini → OmniRoute free tier → Claude → OpenAI.
+  // "strong" (deliberate incident investigation): Claude promoted to the front.
+  const tier = input.tier ?? "cheap";
+  const attempts: Attempt[] =
+    tier === "strong"
+      ? [anthropicAttempt, geminiAttempt, ...omnirouteAttempts, openaiAttempt].filter((a): a is Attempt => a !== null)
+      : [geminiAttempt, ...omnirouteAttempts, anthropicAttempt, openaiAttempt].filter((a): a is Attempt => a !== null);
 
   if (attempts.length === 0) {
     return {

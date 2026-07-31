@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import type { LogEvent } from "@monitor-center/shared";
+import { api } from "../lib/api";
 import styles from "./LogDetailModal.module.css";
 
 function formatFull(iso: string) {
@@ -6,7 +8,61 @@ function formatFull(iso: string) {
 }
 
 export function LogDetailModal({ log, onClose }: { log: LogEvent | null; onClose: () => void }) {
+  const [status, setStatus] = useState("");
+  const [answer, setAnswer] = useState("");
+  const [error, setError] = useState("");
+
+  // Reset the AI explanation when a different log is opened.
+  useEffect(() => {
+    setStatus("");
+    setAnswer("");
+    setError("");
+  }, [log?.id]);
+
   if (!log) return null;
+
+  async function handleExplain() {
+    if (!log) return;
+    setError("");
+    setAnswer("");
+    setStatus("Đang xếp hàng…");
+
+    try {
+      const logTime = new Date(log.timestamp).getTime();
+      const started = await api.startAssistantJob({
+        question: `Giải thích ngắn gọn dòng log này và nguyên nhân khả dĩ (service "${log.service}", mức "${log.level}"): "${log.message}"`,
+        project: log.project,
+        start: new Date(logTime - 30 * 60 * 1000).toISOString(),
+        end: new Date(logTime + 30 * 60 * 1000).toISOString(),
+        tier: "cheap"
+      });
+      const startedAt = Date.now();
+      const hardTimeoutMs = 180_000;
+
+      while (true) {
+        const job = await api.getAssistantJob(started.jobId);
+        setStatus(job.progress ?? job.status);
+
+        if (job.status === "done" && job.result) {
+          setAnswer(job.result.answer);
+          setStatus("");
+          return;
+        }
+        if (job.status === "error") {
+          throw new Error(job.error ?? "Assistant failed");
+        }
+        if (Date.now() - startedAt > hardTimeoutMs) {
+          throw new Error("Quá thời gian chờ, thử lại sau.");
+        }
+        await new Promise((resolve) => setTimeout(resolve, 900));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không giải thích được log này");
+      setStatus("");
+    }
+  }
+
+  const busy = status !== "" && !answer && !error;
 
   return (
     <div
@@ -44,6 +100,16 @@ export function LogDetailModal({ log, onClose }: { log: LogEvent | null; onClose
           </div>
           <div className={styles.label}>Message</div>
           <pre className={styles.code}>{log.message}</pre>
+
+          <div className={styles.explainRow}>
+            <button type="button" className={styles.explainBtn} onClick={() => void handleExplain()} disabled={busy}>
+              {busy ? "Đang phân tích…" : "🤖 Giải thích bằng AI"}
+            </button>
+            {status ? <span className={styles.explainStatus}>{status}</span> : null}
+          </div>
+          {error ? <div className={styles.explainError}>{error}</div> : null}
+          {answer ? <div className={styles.explainAnswer}>{answer}</div> : null}
+
           <div className={styles.label}>Raw</div>
           <pre className={styles.code}>{log.raw}</pre>
           <div className={styles.label}>Metadata</div>

@@ -112,7 +112,9 @@ export async function runDailyTelegramDigestOnce(): Promise<void> {
   const ai = await answerLogQuestion({
     question: env.TELEGRAM_DAILY_REPORT_QUESTION,
     start: bounds.start,
-    end: bounds.end
+    end: bounds.end,
+    // Routine once-a-day digest, not an incident — keep it on the free/cheap tier.
+    tier: "cheap"
   });
   const message = buildAiDailyReportMessage({
     timeZone: tz,
@@ -157,7 +159,9 @@ export function startTelegramDailyReportIfConfigured() {
         const ai = await answerLogQuestion({
           question: env.TELEGRAM_DAILY_REPORT_QUESTION,
           start: bounds.start,
-          end: bounds.end
+          end: bounds.end,
+          // Routine once-a-day digest, not an incident — keep it on the free/cheap tier.
+          tier: "cheap"
         });
         const message = buildAiDailyReportMessage({
           timeZone: tz,
