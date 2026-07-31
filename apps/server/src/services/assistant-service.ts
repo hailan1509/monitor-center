@@ -8,6 +8,12 @@ import { searchLogs } from "./log-repository.js";
 const anthropicClient = env.ANTHROPIC_API_KEY ? new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }) : null;
 const geminiClient = env.GEMINI_API_KEY ? new GoogleGenerativeAI(env.GEMINI_API_KEY) : null;
 const openaiClient = env.OPENAI_API_KEY ? new OpenAI({ apiKey: env.OPENAI_API_KEY }) : null;
+// Self-hosted OmniRoute gateway — OpenAI-compatible endpoint fronting free-tier providers
+// (opencode/mistral/pollinations). Tried after Gemini and before the paid Anthropic/OpenAI keys.
+const omnirouteClient =
+  env.OMNIROUTE_BASE_URL && env.OMNIROUTE_API_KEY
+    ? new OpenAI({ apiKey: env.OMNIROUTE_API_KEY, baseURL: env.OMNIROUTE_BASE_URL })
+    : null;
 
 export type { ChatTurn };
 
@@ -111,128 +117,145 @@ export async function answerLogQuestion(input: {
   const userTurnText = `Question: ${input.question}\n\nContext logs:\n${contextText}`;
   const history = input.history ?? [];
 
-  // Gemini is primary (free-tier friendly for a low-volume internal tool). Claude is a paid
-  // fallback — only used when ANTHROPIC_API_KEY is explicitly set, since the Claude API bills
-  // separately from a claude.ai Pro/Max subscription and this tool defaults to the free option.
+  // Ordered attempts: Gemini (free, primary) → OmniRoute free-tier gateway (opencode/mistral/
+  // pollinations, no cost) → Claude (paid, opt-in) → OpenAI (paid, last resort). Each tier is
+  // only attempted if configured, and a failure falls through to the next tier instead of
+  // failing the whole request.
+  const attempts: Array<{ label: string; run: () => Promise<string> }> = [];
+
   if (geminiClient) {
-    try {
-      const model = geminiClient.getGenerativeModel({
-        model: normalizeGeminiModelName(env.GEMINI_MODEL),
-        systemInstruction: systemText
+    attempts.push({
+      label: "Gemini",
+      run: async () => {
+        const model = geminiClient.getGenerativeModel({
+          model: normalizeGeminiModelName(env.GEMINI_MODEL),
+          systemInstruction: systemText
+        });
+
+        const historyContents = history.map((turn) => ({
+          role: turn.role === "assistant" ? "model" : "user",
+          parts: [{ text: turn.text }]
+        }));
+
+        const result = await withTimeout(
+          model.generateContent({
+            contents: [...historyContents, { role: "user", parts: [{ text: userTurnText }] }],
+            generationConfig: {
+              temperature: 0.2,
+              maxOutputTokens: env.GEMINI_MAX_OUTPUT_TOKENS
+            }
+          }),
+          env.AI_TIMEOUT_MS,
+          "Gemini"
+        );
+
+        return result.response.text();
+      }
+    });
+  }
+
+  if (omnirouteClient) {
+    for (const model of env.OMNIROUTE_FREE_MODELS) {
+      attempts.push({
+        label: `OmniRoute(${model})`,
+        run: async () => {
+          const response = await withTimeout(
+            omnirouteClient.chat.completions.create({
+              model,
+              stream: false,
+              temperature: 0.2,
+              max_tokens: env.GEMINI_MAX_OUTPUT_TOKENS,
+              messages: [
+                { role: "system", content: systemText },
+                ...history.map((turn) => ({ role: turn.role, content: turn.text }) as const),
+                { role: "user" as const, content: userTurnText }
+              ]
+            }),
+            env.AI_TIMEOUT_MS,
+            `OmniRoute(${model})`
+          );
+
+          const text = response.choices[0]?.message?.content;
+          if (!text) throw new Error("Empty response");
+          return text;
+        }
       });
-
-      const historyContents = history.map((turn) => ({
-        role: turn.role === "assistant" ? "model" : "user",
-        parts: [{ text: turn.text }]
-      }));
-
-      const result = await withTimeout(
-        model.generateContent({
-          contents: [...historyContents, { role: "user", parts: [{ text: userTurnText }] }],
-          generationConfig: {
-            temperature: 0.2,
-            maxOutputTokens: env.GEMINI_MAX_OUTPUT_TOKENS
-          }
-        }),
-        env.AI_TIMEOUT_MS,
-        "Gemini"
-      );
-
-      return {
-        answer: result.response.text(),
-        context: summary
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      return {
-        answer: `Không gọi được Gemini lúc này. Lý do: ${message}`,
-        context: summary
-      };
     }
   }
 
   if (anthropicClient) {
-    try {
-      const response = await withTimeout(
-        anthropicClient.messages.create({
-          model: env.ANTHROPIC_MODEL,
-          max_tokens: env.ANTHROPIC_MAX_OUTPUT_TOKENS,
-          system: systemText,
-          messages: [...history.map((turn) => ({ role: turn.role, content: turn.text })), { role: "user" as const, content: userTurnText }]
-        }),
-        env.AI_TIMEOUT_MS,
-        "Claude"
-      );
+    attempts.push({
+      label: "Claude",
+      run: async () => {
+        const response = await withTimeout(
+          anthropicClient.messages.create({
+            model: env.ANTHROPIC_MODEL,
+            max_tokens: env.ANTHROPIC_MAX_OUTPUT_TOKENS,
+            system: systemText,
+            messages: [...history.map((turn) => ({ role: turn.role, content: turn.text })), { role: "user" as const, content: userTurnText }]
+          }),
+          env.AI_TIMEOUT_MS,
+          "Claude"
+        );
 
-      if (response.stop_reason === "refusal") {
-        return {
-          answer: "Claude từ chối trả lời câu hỏi này. Hãy thử diễn đạt lại câu hỏi.",
-          context: summary
-        };
+        if (response.stop_reason === "refusal") {
+          return "Claude từ chối trả lời câu hỏi này. Hãy thử diễn đạt lại câu hỏi.";
+        }
+
+        const textBlock = response.content.find((block): block is Anthropic.TextBlock => block.type === "text");
+        return textBlock?.text ?? "";
       }
+    });
+  }
 
-      const textBlock = response.content.find((block): block is Anthropic.TextBlock => block.type === "text");
-      return {
-        answer: textBlock?.text ?? "",
-        context: summary
-      };
+  if (openaiClient) {
+    attempts.push({
+      label: "OpenAI",
+      run: async () => {
+        const response = await withTimeout(
+          openaiClient.responses.create({
+            model: env.OPENAI_MODEL,
+            input: [
+              {
+                role: "system",
+                content: [{ type: "input_text", text: systemText }]
+              },
+              {
+                role: "user",
+                content: [{ type: "input_text", text: userTurnText }]
+              }
+            ]
+          }),
+          env.AI_TIMEOUT_MS,
+          "OpenAI"
+        );
+
+        return response.output_text;
+      }
+    });
+  }
+
+  if (attempts.length === 0) {
+    return {
+      answer:
+        "Chưa cấu hình AI key. Hãy set GEMINI_API_KEY (khuyến nghị, miễn phí), OMNIROUTE_API_KEY, ANTHROPIC_API_KEY, hoặc OPENAI_API_KEY để bật AI assistant.",
+      context: summary
+    };
+  }
+
+  let lastErrorMessage = "Unknown error";
+  for (const attempt of attempts) {
+    try {
+      const answer = await attempt.run();
+      return { answer, context: summary };
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      return {
-        answer: `Không gọi được Claude lúc này. Lý do: ${message}`,
-        context: summary
-      };
+      lastErrorMessage = error instanceof Error ? error.message : "Unknown error";
+      console.error(`[assistant] ${attempt.label} thất bại: ${lastErrorMessage}`);
     }
   }
 
-  if (!openaiClient) {
-    return {
-      answer:
-        "Chưa cấu hình AI key. Hãy set GEMINI_API_KEY (khuyến nghị, miễn phí), ANTHROPIC_API_KEY, hoặc OPENAI_API_KEY để bật AI assistant.",
-      context: summary
-    };
-  }
-
-  // OpenAI is the last-resort fallback (after Gemini and Claude); kept single-turn for
-  // simplicity — multi-turn is covered by the two higher-priority providers above.
-  try {
-    const response = await withTimeout(
-      openaiClient.responses.create({
-        model: env.OPENAI_MODEL,
-        input: [
-          {
-            role: "system",
-            content: [
-              {
-                type: "input_text",
-                text: systemText
-              }
-            ]
-          },
-          {
-            role: "user",
-            content: [
-              {
-                type: "input_text",
-                text: userTurnText
-              }
-            ]
-          }
-        ]
-      }),
-      env.AI_TIMEOUT_MS,
-      "OpenAI"
-    );
-
-    return {
-      answer: response.output_text,
-      context: summary
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return {
-      answer: `Không gọi được AI assistant lúc này. Lý do: ${message}`,
-      context: summary
-    };
-  }
+  return {
+    answer: `Không gọi được AI assistant lúc này. Lý do: ${lastErrorMessage}`,
+    context: summary
+  };
 }

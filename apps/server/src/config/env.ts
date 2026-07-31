@@ -15,6 +15,22 @@ const envSchema = z.object({
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().default("gemini-flash-latest"),
   GEMINI_MAX_OUTPUT_TOKENS: z.coerce.number().min(64).max(8192).default(2048),
+  /** Self-hosted OmniRoute gateway (VPS) — OpenAI-compatible endpoint fronting several free-tier
+   * providers. Used as a free fallback tier before the paid ANTHROPIC/OPENAI keys are hit. */
+  OMNIROUTE_BASE_URL: z.string().optional(),
+  OMNIROUTE_API_KEY: z.string().optional(),
+  /** CSV of model ids to try in order, e.g. "mistral/mistral-small-latest,opencode/claude-sonnet-5".
+   * Defaults to only mistral — at setup time opencode/pollinations returned 401 through OmniRoute
+   * despite being listed as keyless-connected; add them back once that's fixed on the VPS side. */
+  OMNIROUTE_FREE_MODELS: z
+    .string()
+    .optional()
+    .transform((value) =>
+      (value ?? "mistral/mistral-small-latest")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    ),
   AI_TIMEOUT_MS: z.coerce.number().min(5_000).max(300_000).default(120_000),
   DOCKER_SOCKET_PATH: z.string().default("/var/run/docker.sock"),
   COOKIE_SECURE: z
