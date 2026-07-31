@@ -26,7 +26,7 @@ const envSchema = z.object({
     .string()
     .optional()
     .transform((value) =>
-      (value ?? "mistral/mistral-small-latest")
+      (!value?.trim() ? "mistral/mistral-small-latest" : value)
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean)
