@@ -1,3 +1,4 @@
+import type Docker from "dockerode";
 import { env } from "../config/env.js";
 import {
   getTelegramPollLastUpdateId,
@@ -7,6 +8,7 @@ import {
 import { handleTelegramChat } from "./telegram-chat-handler.js";
 import { runAlertAiAnalysis } from "./telegram-error-alerts.js";
 import { silenceManager } from "./silence-manager.js";
+import { blockIp, isBlockableIp } from "./ip-blocklist.js";
 
 const SILENCE_DURATION_MS = 60 * 60 * 1000;
 
@@ -79,20 +81,45 @@ async function sendPlainMessage(token: string, chatId: string, text: string) {
   await telegramApi(token, "sendMessage", { chat_id: chatId, text });
 }
 
-/** callback_data encodes "action:project:service" (service may itself contain ":" so it's not re-split). */
-async function handleCallbackQuery(token: string, query: CallbackQuery) {
+/**
+ * callback_data encodes "action:rest". For "silence"/"aidetail", rest is "project:service"
+ * (service may itself contain ":" so it's not re-split). For "blockip", rest is just the IP.
+ */
+async function handleCallbackQuery(token: string, query: CallbackQuery, docker: Docker) {
   const chatId = query.message?.chat?.id;
   const data = query.data ?? "";
   const separatorIndex1 = data.indexOf(":");
-  const separatorIndex2 = data.indexOf(":", separatorIndex1 + 1);
-  if (chatId == null || separatorIndex1 === -1 || separatorIndex2 === -1) {
+  if (chatId == null || separatorIndex1 === -1) {
     await answerCallbackQuery(token, query.id, "Không xử lý được yêu cầu.");
     return;
   }
 
   const action = data.slice(0, separatorIndex1);
-  const project = data.slice(separatorIndex1 + 1, separatorIndex2);
-  const service = data.slice(separatorIndex2 + 1);
+  const rest = data.slice(separatorIndex1 + 1);
+
+  if (action === "blockip") {
+    const ip = rest;
+    if (!isBlockableIp(ip)) {
+      await answerCallbackQuery(token, query.id, "IP không hợp lệ.");
+      return;
+    }
+    await answerCallbackQuery(token, query.id, "Đang chặn...");
+    try {
+      await blockIp(docker, ip, "Chặn qua cảnh báo Telegram", `telegram:${chatId}`);
+      await sendPlainMessage(token, String(chatId), `🚫 Đã chặn IP ${ip} trên firewall VPS.`);
+    } catch (error) {
+      await sendPlainMessage(token, String(chatId), `❌ Không chặn được ${ip}: ${error instanceof Error ? error.message : "lỗi không rõ"}`);
+    }
+    return;
+  }
+
+  const separatorIndex2 = rest.indexOf(":");
+  if (separatorIndex2 === -1) {
+    await answerCallbackQuery(token, query.id, "Không xử lý được yêu cầu.");
+    return;
+  }
+  const project = rest.slice(0, separatorIndex2);
+  const service = rest.slice(separatorIndex2 + 1);
 
   if (action === "silence") {
     silenceManager.silence(project, service, SILENCE_DURATION_MS);
@@ -136,7 +163,7 @@ export async function deleteTelegramWebhookIfRequested() {
 let pollIntervalHandle: ReturnType<typeof setInterval> | null = null;
 
 /** Một vòng getUpdates: lưu subscriber từ chat private (dùng cho poller và script gửi thử). */
-export async function ingestTelegramUpdatesOnce(token: string): Promise<void> {
+export async function ingestTelegramUpdatesOnce(token: string, docker: Docker): Promise<void> {
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), 15_000);
 
@@ -169,7 +196,7 @@ export async function ingestTelegramUpdatesOnce(token: string): Promise<void> {
       maxId = Math.max(maxId, update.update_id);
 
       if (update.callback_query) {
-        void handleCallbackQuery(token, update.callback_query);
+        void handleCallbackQuery(token, update.callback_query, docker);
         continue;
       }
 
@@ -206,7 +233,7 @@ export async function ingestTelegramUpdatesOnce(token: string): Promise<void> {
   }
 }
 
-export function startTelegramUpdatesPollerIfConfigured() {
+export function startTelegramUpdatesPollerIfConfigured(docker: Docker) {
   const token = env.TELEGRAM_BOT_TOKEN;
   if (!token || !env.TELEGRAM_POLL_ENABLED) {
     return;
@@ -218,8 +245,8 @@ export function startTelegramUpdatesPollerIfConfigured() {
 
   console.log(`[telegram] Subscriber poll every ${env.TELEGRAM_POLL_INTERVAL_MS}ms — share bot: ${botHint}`);
 
-  void ingestTelegramUpdatesOnce(token);
+  void ingestTelegramUpdatesOnce(token, docker);
   pollIntervalHandle = setInterval(() => {
-    void ingestTelegramUpdatesOnce(token);
+    void ingestTelegramUpdatesOnce(token, docker);
   }, env.TELEGRAM_POLL_INTERVAL_MS);
 }

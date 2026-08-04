@@ -71,7 +71,7 @@ async function main() {
     console.error("[ip-blocklist] Failed to reapply blocked IPs on startup:", error instanceof Error ? error.message : error);
   });
   await deleteTelegramWebhookIfRequested();
-  startTelegramUpdatesPollerIfConfigured();
+  startTelegramUpdatesPollerIfConfigured(collector.docker);
   startTelegramDailyReportIfConfigured();
   startContainerStatsPoller(collector.docker, () => collector.getRunningContainers());
   startUptimeChecker();

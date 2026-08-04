@@ -9,8 +9,9 @@ import { insertLog, pruneContainerStates, upsertContainerState } from "../servic
 import { buildFingerprint } from "../services/fingerprint.js";
 import { inferLogLevel, normalizeMessage } from "../services/log-level.js";
 import { classifySecurityEvent, parseNginxAccessLog } from "../services/access-log.js";
-import { telegramErrorAlerter, sendCrashAlert, sendSpikeAlert } from "../services/telegram-error-alerts.js";
+import { telegramErrorAlerter, sendCrashAlert, sendSpikeAlert, sendIpAnomalyAlert } from "../services/telegram-error-alerts.js";
 import { spikeDetector } from "../services/spike-detector.js";
+import { ipAnomalyDetector } from "../services/ip-anomaly-detector.js";
 import type { RealtimeHub } from "../services/ws-hub.js";
 
 // Docker internal network CIDR: 172.16.0.0/12 covers 172.16–172.31
@@ -274,6 +275,15 @@ export class DockerCollector {
             const spike = spikeDetector.record(project, service);
             if (spike.isSpike) {
               void sendSpikeAlert(project, service, spike);
+            }
+          }
+
+          // Per-IP request-rate / scanning anomaly — only meaningful for actual HTTP access-log
+          // lines, which is exactly what carries a parsed clientIp.
+          if (parsedAccess?.clientIp) {
+            const anomaly = ipAnomalyDetector.record(parsedAccess.clientIp, isSecurity);
+            if (anomaly) {
+              void sendIpAnomalyAlert(parsedAccess.clientIp, project, service, anomaly);
             }
           }
         }
