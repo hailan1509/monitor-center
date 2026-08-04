@@ -60,6 +60,13 @@ CREATE TABLE IF NOT EXISTS telegram_bot_poll_state (
   last_update_id BIGINT NOT NULL DEFAULT 0,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS blocked_ips (
+  ip TEXT PRIMARY KEY,
+  reason TEXT,
+  blocked_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 `;
 
 export function partitionSql(partitionDate: Date) {

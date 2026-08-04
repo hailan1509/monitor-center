@@ -36,7 +36,7 @@ export function Root() {
         <Route path="/projects/:project" element={<ProjectDetail />} />
         <Route path="/logs" element={<Logs />} />
         <Route path="/issues" element={<Issues />} />
-        <Route path="/security" element={<Security />} />
+        <Route path="/security" element={<Security user={user} />} />
         <Route path="/containers" element={<Containers />} />
         <Route path="/uptime" element={<Uptime />} />
         <Route path="/assistant" element={<Assistant />} />

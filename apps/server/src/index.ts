@@ -16,6 +16,7 @@ import {
 } from "./services/telegram-updates-poller.js";
 import { startContainerStatsPoller } from "./services/container-stats.js";
 import { startUptimeChecker } from "./services/uptime-checker.js";
+import { reapplyAllBlocks } from "./services/ip-blocklist.js";
 
 async function main() {
   await ensureDatabaseReady();
@@ -64,6 +65,11 @@ async function main() {
   });
 
   await collector.start();
+  // iptables rules don't survive a host reboot — reapply persisted blocks; best-effort so a
+  // firewall-helper hiccup (e.g. no network to pull the alpine image) never blocks startup.
+  reapplyAllBlocks(collector.docker).catch((error) => {
+    console.error("[ip-blocklist] Failed to reapply blocked IPs on startup:", error instanceof Error ? error.message : error);
+  });
   await deleteTelegramWebhookIfRequested();
   startTelegramUpdatesPollerIfConfigured();
   startTelegramDailyReportIfConfigured();

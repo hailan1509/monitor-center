@@ -19,6 +19,7 @@ import {
 } from "../services/log-repository.js";
 import { createAssistantJob, getAssistantJob } from "../services/assistant-jobs.js";
 import { rateLimit } from "../services/rate-limit.js";
+import { blockIp, isBlockableIp, listBlockedIps, unblockIp } from "../services/ip-blocklist.js";
 
 // Express 4 does not forward rejected promises from async handlers to the error
 // middleware on its own — an unhandled rejection there crashes the whole process.
@@ -138,6 +139,50 @@ export function createApiRouter({ docker }: { docker: Docker }) {
       }
       const buckets = await getSecurityTimeseries(parsed.data);
       response.json({ buckets });
+    })
+  );
+
+  router.get(
+    "/security/blocked-ips",
+    requireAuth,
+    asyncHandler(async (_request, response) => {
+      response.json({ blockedIps: await listBlockedIps() });
+    })
+  );
+
+  router.post(
+    "/security/blocked-ips",
+    requireRole("admin"),
+    asyncHandler(async (request, response) => {
+      const schema = z.object({
+        ip: z.string().refine(isBlockableIp, "IP không hợp lệ hoặc không thể chặn (loopback/nội bộ Docker)."),
+        reason: z.string().max(200).optional()
+      });
+      const parsed = schema.safeParse(request.body);
+      if (!parsed.success) {
+        response.status(400).json({ error: parsed.error.flatten() });
+        return;
+      }
+
+      try {
+        await blockIp(docker, parsed.data.ip, parsed.data.reason ?? null, request.session.user?.email ?? null);
+        response.json({ ok: true });
+      } catch (error) {
+        response.status(500).json({ error: error instanceof Error ? error.message : "Không chặn được IP này" });
+      }
+    })
+  );
+
+  router.delete(
+    "/security/blocked-ips/:ip",
+    requireRole("admin"),
+    asyncHandler(async (request, response) => {
+      try {
+        await unblockIp(docker, String(request.params.ip));
+        response.json({ ok: true });
+      } catch (error) {
+        response.status(500).json({ error: error instanceof Error ? error.message : "Không bỏ chặn được IP này" });
+      }
     })
   );
 

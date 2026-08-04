@@ -171,5 +171,18 @@ export const api = {
     request<{ ok: boolean }>("/api/silences", {
       method: "DELETE",
       body: JSON.stringify(payload)
+    }),
+  listBlockedIps: () =>
+    request<{ blockedIps: Array<{ ip: string; reason: string | null; blockedBy: string | null; createdAt: string }> }>(
+      "/api/security/blocked-ips"
+    ),
+  blockIp: (payload: { ip: string; reason?: string }) =>
+    request<{ ok: boolean }>("/api/security/blocked-ips", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  unblockIp: (ip: string) =>
+    request<{ ok: boolean }>(`/api/security/blocked-ips/${encodeURIComponent(ip)}`, {
+      method: "DELETE"
     })
 };
