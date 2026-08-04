@@ -23,18 +23,18 @@ export function isBlockableIp(ip: string): boolean {
  * granting monitor-server's own container new capabilities.
  */
 async function runFirewallScript(docker: Docker, script: string): Promise<void> {
-  const container = await docker.createContainer({
-    Image: "alpine:3.20",
-    Cmd: ["sh", "-c", script],
-    HostConfig: {
-      NetworkMode: "host",
-      CapAdd: ["NET_ADMIN"],
-      AutoRemove: true
-    },
-    Tty: false
-  });
-
   try {
+    const container = await docker.createContainer({
+      Image: "alpine:3.20",
+      Cmd: ["sh", "-c", script],
+      HostConfig: {
+        NetworkMode: "host",
+        CapAdd: ["NET_ADMIN"],
+        AutoRemove: true
+      },
+      Tty: false
+    });
+
     await container.start();
     const result = await container.wait();
     const exitCode = (result as { StatusCode?: number }).StatusCode ?? 0;
@@ -42,7 +42,7 @@ async function runFirewallScript(docker: Docker, script: string): Promise<void> 
       throw new Error(`Firewall helper exited with code ${exitCode}`);
     }
   } catch (error) {
-    // If the image needs pulling, createContainer throws a 404 before we ever get here.
+    // createContainer throws a 404 "No such image" if alpine hasn't been pulled yet.
     if (error instanceof Error && /No such image/i.test(error.message)) {
       const stream = await docker.pull("alpine:3.20");
       await new Promise<void>((resolve, reject) => {
