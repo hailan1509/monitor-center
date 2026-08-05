@@ -281,7 +281,7 @@ export class DockerCollector {
           // Per-IP request-rate / scanning anomaly — only meaningful for actual HTTP access-log
           // lines, which is exactly what carries a parsed clientIp.
           if (parsedAccess?.clientIp) {
-            const anomaly = ipAnomalyDetector.record(parsedAccess.clientIp, isSecurity);
+            const anomaly = ipAnomalyDetector.record(parsedAccess.clientIp, isSecurity, parsedAccess.path);
             if (anomaly) {
               void sendIpAnomalyAlert(parsedAccess.clientIp, project, service, anomaly);
             }

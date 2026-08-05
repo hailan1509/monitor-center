@@ -3,6 +3,7 @@ import { env } from "../config/env.js";
 import { listTelegramReportChatIds } from "./telegram-subscribers.js";
 import { silenceManager } from "./silence-manager.js";
 import type { SpikeResult } from "./spike-detector.js";
+import type { IpAnomaly } from "./ip-anomaly-detector.js";
 import { answerLogQuestion } from "./assistant-service.js";
 
 export type InlineKeyboardButton = { text: string; callback_data: string };
@@ -264,12 +265,7 @@ export async function sendSpikeAlert(
 
 // ─── IP anomaly alert ─────────────────────────────────────────────────────────
 
-export async function sendIpAnomalyAlert(
-  ip: string,
-  project: string,
-  service: string,
-  anomaly: { type: "rate" | "scan"; count: number }
-): Promise<void> {
+export async function sendIpAnomalyAlert(ip: string, project: string, service: string, anomaly: IpAnomaly): Promise<void> {
   if (!env.TELEGRAM_BOT_TOKEN) return;
   if (!env.TELEGRAM_ERROR_ALERTS_ENABLED) return;
 
@@ -278,11 +274,14 @@ export async function sendIpAnomalyAlert(
       ? `🔎 Đang quét: ${anomaly.count} request đáng ngờ trong 5 phút`
       : `⚡ Gọi API dồn dập: ${anomaly.count} request trong 1 phút`;
 
+  const pathLines = anomaly.topPaths.map((p) => `   • ${p.path} (${p.count})`);
+
   const lines = [
     `🕵️ IP bất thường — ${ip}`,
     `🕐 ${nowVietnam()}`,
     `📦 Gần nhất: ${project} / ${service}`,
-    detailLine
+    detailLine,
+    ...pathLines
   ];
 
   void broadcastText(lines.join("\n"), [[{ text: "🚫 Chặn IP ngay", callback_data: `blockip:${ip}` }]]);
