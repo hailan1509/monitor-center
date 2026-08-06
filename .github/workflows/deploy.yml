@@ -33,4 +33,10 @@ jobs:
             git reset --hard origin/main
             docker compose build monitor-server monitor-web
             docker compose up -d monitor-server monitor-web
-            docker image prune -f
+            # Plain "docker image prune -f" only clears dangling (untagged) images and never
+            # touches build cache — a VPS disk-full incident traced back to ~15GB of unused-but-
+            # tagged images + build cache accumulated across deploys. -a catches unused tagged
+            # images too (safe: never removes an image referenced by any container, running or
+            # stopped).
+            docker image prune -a -f
+            docker builder prune -f
