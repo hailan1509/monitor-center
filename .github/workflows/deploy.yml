@@ -26,6 +26,11 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
+          # A cold build-cache miss (see the prune note below) makes docker compose build
+          # rebuild everything from scratch, which can run past the action's short default
+          # command timeout and get killed mid-deploy — leaving git updated but the old image
+          # still running. Give it real headroom.
+          command_timeout: 30m
           script: |
             set -e
             cd /root/projects/monitor-center
@@ -37,6 +42,8 @@ jobs:
             # touches build cache — a VPS disk-full incident traced back to ~15GB of unused-but-
             # tagged images + build cache accumulated across deploys. -a catches unused tagged
             # images too (safe: never removes an image referenced by any container, running or
-            # stopped).
+            # stopped). Build cache is pruned by age, not wiped outright — unconditional pruning
+            # forced every single deploy into a cold-cache full rebuild, which is what caused the
+            # timeout above in the first place.
             docker image prune -a -f
-            docker builder prune -f
+            docker builder prune -f --filter unused-for=48h
