@@ -120,7 +120,13 @@ const envSchema = z.object({
   /** Ngưỡng memory (%) để gửi alert. Mặc định 90. */
   CONTAINER_MEMORY_ALERT_THRESHOLD: z.coerce.number().min(50).max(99).default(90),
   /** Bao lâu poll Docker stats một lần (ms). Mặc định 30s. */
-  CONTAINER_STATS_INTERVAL_MS: z.coerce.number().min(10_000).max(300_000).default(30_000)
+  CONTAINER_STATS_INTERVAL_MS: z.coerce.number().min(10_000).max(300_000).default(30_000),
+  /** Tự động chặn IP trên firewall VPS khi phát hiện "scan" (path đáng ngờ đã biết) — không áp
+   * dụng cho "rate" (chỉ là volume cao, dễ false-positive với client hợp lệ bursty). */
+  IP_AUTO_BLOCK_SCAN: z
+    .string()
+    .optional()
+    .transform((value) => value === "true")
 });
 
 export const env = envSchema.parse(process.env);

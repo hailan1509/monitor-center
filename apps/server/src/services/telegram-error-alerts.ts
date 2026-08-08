@@ -265,7 +265,13 @@ export async function sendSpikeAlert(
 
 // ─── IP anomaly alert ─────────────────────────────────────────────────────────
 
-export async function sendIpAnomalyAlert(ip: string, project: string, service: string, anomaly: IpAnomaly): Promise<void> {
+export async function sendIpAnomalyAlert(
+  ip: string,
+  project: string,
+  service: string,
+  anomaly: IpAnomaly,
+  options?: { autoBlocked?: boolean }
+): Promise<void> {
   if (!env.TELEGRAM_BOT_TOKEN) return;
   if (!env.TELEGRAM_ERROR_ALERTS_ENABLED) return;
 
@@ -283,6 +289,12 @@ export async function sendIpAnomalyAlert(ip: string, project: string, service: s
     detailLine,
     ...pathLines
   ];
+
+  if (options?.autoBlocked) {
+    lines.push("✅ Đã tự động chặn trên firewall VPS.");
+    void broadcastText(lines.join("\n"));
+    return;
+  }
 
   void broadcastText(lines.join("\n"), [[{ text: "🚫 Chặn IP ngay", callback_data: `blockip:${ip}` }]]);
 }

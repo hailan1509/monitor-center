@@ -11,7 +11,8 @@ import { inferLogLevel, normalizeMessage } from "../services/log-level.js";
 import { classifySecurityEvent, parseNginxAccessLog } from "../services/access-log.js";
 import { telegramErrorAlerter, sendCrashAlert, sendSpikeAlert, sendIpAnomalyAlert } from "../services/telegram-error-alerts.js";
 import { spikeDetector } from "../services/spike-detector.js";
-import { ipAnomalyDetector } from "../services/ip-anomaly-detector.js";
+import { ipAnomalyDetector, type IpAnomaly } from "../services/ip-anomaly-detector.js";
+import { blockIp, isBlockableIp } from "../services/ip-blocklist.js";
 import type { RealtimeHub } from "../services/ws-hub.js";
 
 // Docker internal network CIDR: 172.16.0.0/12 covers 172.16–172.31
@@ -66,6 +67,27 @@ function inferPostgresSeverity(message: string) {
   if (token === "WARNING") return "warn";
   // LOG/INFO/NOTICE are normal operation.
   return "info";
+}
+
+/**
+ * "scan" means the IP already tripped the security-path classifier N times — a high-confidence
+ * malicious signal, safe to auto-block. "rate" is raw request volume alone, which a legitimate
+ * but bursty client (health checks, retry storms) can trigger too, so it stays alert-only with
+ * the manual "🚫 Chặn IP ngay" button.
+ */
+async function handleIpAnomaly(docker: Docker, ip: string, project: string, service: string, anomaly: IpAnomaly): Promise<void> {
+  if (anomaly.type === "scan" && env.IP_AUTO_BLOCK_SCAN && isBlockableIp(ip)) {
+    try {
+      await blockIp(docker, ip, `Tự động chặn — quét ${anomaly.count} path đáng ngờ/5 phút`, "auto:scan-detector");
+      await sendIpAnomalyAlert(ip, project, service, anomaly, { autoBlocked: true });
+      return;
+    } catch (error) {
+      console.error(`[ip-anomaly] Auto-block failed for ${ip}:`, error instanceof Error ? error.message : error);
+      // Fall through to the normal alert with a manual block button.
+    }
+  }
+
+  void sendIpAnomalyAlert(ip, project, service, anomaly);
 }
 
 type CollectorDependencies = {
@@ -283,7 +305,7 @@ export class DockerCollector {
           if (parsedAccess?.clientIp) {
             const anomaly = ipAnomalyDetector.record(parsedAccess.clientIp, isSecurity, parsedAccess.path);
             if (anomaly) {
-              void sendIpAnomalyAlert(parsedAccess.clientIp, project, service, anomaly);
+              void handleIpAnomaly(this.docker, parsedAccess.clientIp, project, service, anomaly);
             }
           }
         }
