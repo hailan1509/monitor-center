@@ -8,6 +8,7 @@ import { blockIp, unblockIp, listBlockedIps, isBlockableIp } from "./ip-blocklis
 import { getLatestStats } from "./container-stats.js";
 import { getUptimeStatuses } from "./uptime-checker.js";
 import { silenceManager } from "./silence-manager.js";
+import { getDiskUsage, cleanupDiskSpace, formatDiskCleanupReport } from "./disk-space.js";
 
 /**
  * Tools deliberately limited to actions already vetted elsewhere in the app (Telegram buttons,
@@ -54,6 +55,16 @@ const tools: Anthropic.Tool[] = [
   {
     name: "get_uptime_status",
     description: "Xem trạng thái UP/DOWN hiện tại của các endpoint đang được theo dõi.",
+    input_schema: { type: "object", properties: {} }
+  },
+  {
+    name: "get_disk_usage",
+    description: "Xem dung lượng ổ đĩa VPS hiện tại (tổng, còn trống, % đã dùng).",
+    input_schema: { type: "object", properties: {} }
+  },
+  {
+    name: "cleanup_disk",
+    description: "Dọn dẹp ổ đĩa VPS: xoá Docker image không dùng và build cache. Dùng khi đĩa gần đầy. Trả về báo cáo trước/sau và dung lượng đã giải phóng.",
     input_schema: { type: "object", properties: {} }
   },
   {
@@ -116,6 +127,15 @@ async function runTool(docker: Docker, name: string, rawInput: unknown): Promise
       return checks.length
         ? checks.map((u) => `${u.name}: ${u.up ? "UP" : `DOWN${u.error ? ` (${u.error})` : ""}`}`).join("\n")
         : "Chưa cấu hình uptime check nào.";
+    }
+    case "get_disk_usage": {
+      const usage = getDiskUsage();
+      const gb = (b: number) => `${(b / 1024 / 1024 / 1024).toFixed(1)}GB`;
+      return `Đĩa: ${usage.usedPercent.toFixed(1)}% đã dùng, còn trống ${gb(usage.availableBytes)} / ${gb(usage.totalBytes)}.`;
+    }
+    case "cleanup_disk": {
+      const report = await cleanupDiskSpace(docker);
+      return formatDiskCleanupReport(report);
     }
     case "silence_alerts": {
       const project = String(input.project ?? "");

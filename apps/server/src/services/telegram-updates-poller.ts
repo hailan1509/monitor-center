@@ -10,6 +10,7 @@ import { runAlertAiAnalysis } from "./telegram-error-alerts.js";
 import { silenceManager } from "./silence-manager.js";
 import { blockIp, isBlockableIp } from "./ip-blocklist.js";
 import { restartContainer } from "./container-actions.js";
+import { cleanupDiskSpace, formatDiskCleanupReport } from "./disk-space.js";
 import { formatForTelegram } from "./telegram-format.js";
 import { trySendAsDocument } from "./telegram-report.js";
 
@@ -120,6 +121,17 @@ async function handleCallbackQuery(token: string, query: CallbackQuery, docker: 
       await sendPlainMessage(token, String(chatId), `🚫 Đã chặn IP ${ip} trên firewall VPS.`);
     } catch (error) {
       await sendPlainMessage(token, String(chatId), `❌ Không chặn được ${ip}: ${error instanceof Error ? error.message : "lỗi không rõ"}`);
+    }
+    return;
+  }
+
+  if (action === "diskcleanup") {
+    await answerCallbackQuery(token, query.id, "Đang dọn dẹp...");
+    try {
+      const report = await cleanupDiskSpace(docker);
+      await sendPlainMessage(token, String(chatId), formatDiskCleanupReport(report));
+    } catch (error) {
+      await sendPlainMessage(token, String(chatId), `❌ Dọn dẹp thất bại: ${error instanceof Error ? error.message : "lỗi không rõ"}`);
     }
     return;
   }

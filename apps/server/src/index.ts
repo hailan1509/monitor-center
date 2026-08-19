@@ -17,6 +17,7 @@ import {
 import { startContainerStatsPoller } from "./services/container-stats.js";
 import { startUptimeChecker } from "./services/uptime-checker.js";
 import { reapplyAllBlocks } from "./services/ip-blocklist.js";
+import { startDiskSpaceChecker } from "./services/disk-space.js";
 
 async function main() {
   await ensureDatabaseReady();
@@ -75,6 +76,7 @@ async function main() {
   startTelegramDailyReportIfConfigured();
   startContainerStatsPoller(collector.docker, () => collector.getRunningContainers());
   startUptimeChecker();
+  startDiskSpaceChecker();
 
   server.listen(env.PORT, () => {
     console.log(`Monitor server listening on :${env.PORT}`);

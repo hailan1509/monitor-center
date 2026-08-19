@@ -130,7 +130,11 @@ const envSchema = z.object({
   IP_AUTO_BLOCK: z
     .string()
     .optional()
-    .transform((value) => value === "true")
+    .transform((value) => value === "true"),
+  /** Ngưỡng dung lượng ổ đĩa VPS (%) để gửi alert. Mặc định 85. */
+  DISK_ALERT_THRESHOLD: z.coerce.number().min(50).max(99).default(85),
+  /** Bao lâu kiểm tra dung lượng đĩa một lần (ms). Mặc định 5 phút. */
+  DISK_CHECK_INTERVAL_MS: z.coerce.number().min(60_000).max(3_600_000).default(300_000)
 });
 
 export const env = envSchema.parse(process.env);
