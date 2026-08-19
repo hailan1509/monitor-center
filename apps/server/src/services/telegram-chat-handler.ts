@@ -5,6 +5,7 @@ import { answerLogQuestion } from "./assistant-service.js";
 import { runTelegramAgent } from "./telegram-agent.js";
 import { getLatestStats } from "./container-stats.js";
 import { getUptimeStatuses } from "./uptime-checker.js";
+import { formatForTelegram } from "./telegram-format.js";
 
 const COOLDOWN_MS = 5_000;
 const lastHandledAt = new Map<string, number>();
@@ -37,19 +38,28 @@ function chunkText(text: string, max = 3900) {
   return chunks.length ? chunks : [text];
 }
 
-async function telegramPost(method: string, body: Record<string, unknown>) {
+async function telegramPost(method: string, body: Record<string, unknown>): Promise<{ ok: boolean; description?: string }> {
   const token = env.TELEGRAM_BOT_TOKEN;
-  if (!token) return;
-  await fetch(`https://api.telegram.org/bot${token}/${method}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
-  }).catch(() => undefined);
+  if (!token) return { ok: false, description: "no token" };
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    return (await response.json()) as { ok: boolean; description?: string };
+  } catch (error) {
+    return { ok: false, description: error instanceof Error ? error.message : "network error" };
+  }
 }
 
 async function sendReply(chatId: string, text: string) {
-  for (const chunk of chunkText(text)) {
-    await telegramPost("sendMessage", { chat_id: chatId, text: chunk });
+  for (const chunk of chunkText(formatForTelegram(text))) {
+    const result = await telegramPost("sendMessage", { chat_id: chatId, text: chunk, parse_mode: "Markdown" });
+    if (!result.ok) {
+      // Likely unbalanced * _ ` entities left over from AI output — resend plain rather than lose the message.
+      await telegramPost("sendMessage", { chat_id: chatId, text: chunk });
+    }
   }
 }
 
@@ -119,7 +129,9 @@ export async function handleTelegramChat(chatId: string, text: string, docker: D
         systemPrompt:
           "Bạn là trợ lý giám sát hệ thống server. Trả lời bằng tiếng Việt, ngắn gọn và rõ ràng. " +
           "Dựa vào dữ liệu log và thông tin hệ thống được cung cấp. " +
-          "Nếu không có đủ thông tin, hãy nói rõ. Không bịa đặt.",
+          "Nếu không có đủ thông tin, hãy nói rõ. Không bịa đặt. " +
+          "Đây là tin nhắn Telegram, không phải tài liệu: không dùng bảng markdown, không dùng heading #, " +
+          "ưu tiên gạch đầu dòng ngắn gọn và *in đậm* (một dấu sao) cho từ khoá quan trọng.",
         extraContext: systemContext,
         history
       });

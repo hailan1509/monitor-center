@@ -5,6 +5,7 @@ import { silenceManager } from "./silence-manager.js";
 import type { SpikeResult } from "./spike-detector.js";
 import type { IpAnomaly } from "./ip-anomaly-detector.js";
 import { answerLogQuestion } from "./assistant-service.js";
+import { formatForTelegram } from "./telegram-format.js";
 
 export type InlineKeyboardButton = { text: string; callback_data: string };
 
@@ -30,22 +31,34 @@ async function resolveRecipientChatIds(): Promise<string[]> {
 }
 
 async function sendTelegramText(token: string, chatId: string, text: string, buttons?: InlineKeyboardButton[][]) {
-  const parts = chunkText(text);
+  const parts = chunkText(formatForTelegram(text));
   for (let i = 0; i < parts.length; i++) {
     // Buttons only make sense attached to the final chunk (the one the user reads last).
     const isLast = i === parts.length - 1;
-    const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    const baseBody = {
+      chat_id: chatId,
+      text: parts[i],
+      disable_web_page_preview: true,
+      ...(isLast && buttons ? { reply_markup: { inline_keyboard: buttons } } : {})
+    };
+
+    let response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: parts[i],
-        disable_web_page_preview: true,
-        ...(isLast && buttons ? { reply_markup: { inline_keyboard: buttons } } : {})
-      })
+      body: JSON.stringify({ ...baseBody, parse_mode: "Markdown" })
     });
+    let payload = (await response.json()) as { ok: boolean; description?: string };
 
-    const payload = (await response.json()) as { ok: boolean; description?: string };
+    if (!payload.ok) {
+      // Likely unbalanced * _ ` entities left over from AI output — resend plain rather than lose the alert.
+      response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(baseBody)
+      });
+      payload = (await response.json()) as { ok: boolean; description?: string };
+    }
+
     if (!payload.ok) {
       throw new Error(payload.description ?? `Telegram HTTP ${response.status}`);
     }
@@ -82,7 +95,8 @@ export async function runAlertAiAnalysis(project: string, service: string, quest
       question,
       systemPrompt:
         "Bạn là trợ lý giám sát hệ thống server. Dựa vào log được cung cấp, phân tích nguyên nhân khả dĩ, mức độ ảnh hưởng, " +
-        "và đề xuất bước kiểm tra tiếp theo. Trả lời bằng tiếng Việt, ngắn gọn theo gạch đầu dòng, tối đa ~6 dòng.",
+        "và đề xuất bước kiểm tra tiếp theo. Trả lời bằng tiếng Việt, ngắn gọn theo gạch đầu dòng, tối đa ~6 dòng. " +
+        "Đây là tin nhắn Telegram: không dùng bảng markdown, không dùng heading #.",
       // Crash/spike alerts are an actual incident moment — worth the paid Claude model first.
       tier: "strong"
     });

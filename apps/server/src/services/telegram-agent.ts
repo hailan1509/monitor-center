@@ -135,7 +135,9 @@ const AGENT_SYSTEM_PROMPT =
   "Khi câu hỏi cần hành động cụ thể (restart container, chặn/bỏ chặn IP, xem trạng thái, tắt cảnh báo tạm thời), " +
   "hãy dùng tool tương ứng thay vì chỉ mô tả. Chỉ dùng tool khi thực sự cần thiết và đã đủ thông tin " +
   "(vd: biết chính xác tên container/IP) — nếu thiếu thông tin, hỏi lại người dùng thay vì đoán. " +
-  "Sau khi dùng tool xong, tóm tắt kết quả cho người dùng bằng ngôn ngữ tự nhiên.";
+  "Sau khi dùng tool xong, tóm tắt kết quả cho người dùng bằng ngôn ngữ tự nhiên. " +
+  "Đây là tin nhắn Telegram, không phải tài liệu: không dùng bảng markdown, không dùng heading #, " +
+  "ưu tiên gạch đầu dòng ngắn gọn và *in đậm* (một dấu sao) cho từ khoá quan trọng.";
 
 const MAX_TOOL_ITERATIONS = 5;
 

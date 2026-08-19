@@ -10,6 +10,7 @@ import { runAlertAiAnalysis } from "./telegram-error-alerts.js";
 import { silenceManager } from "./silence-manager.js";
 import { blockIp, isBlockableIp } from "./ip-blocklist.js";
 import { restartContainer } from "./container-actions.js";
+import { formatForTelegram } from "./telegram-format.js";
 
 const SILENCE_DURATION_MS = 60 * 60 * 1000;
 
@@ -79,7 +80,12 @@ async function answerCallbackQuery(token: string, callbackQueryId: string, text:
 }
 
 async function sendPlainMessage(token: string, chatId: string, text: string) {
-  await telegramApi(token, "sendMessage", { chat_id: chatId, text });
+  const formatted = formatForTelegram(text);
+  const result = await telegramApi(token, "sendMessage", { chat_id: chatId, text: formatted, parse_mode: "Markdown" });
+  if (!result.ok) {
+    // Likely unbalanced * _ ` entities left over from AI output — resend plain rather than lose the message.
+    await telegramApi(token, "sendMessage", { chat_id: chatId, text: formatted });
+  }
 }
 
 /**
