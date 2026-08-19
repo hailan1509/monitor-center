@@ -70,18 +70,21 @@ function inferPostgresSeverity(message: string) {
 }
 
 /**
- * "scan" means the IP already tripped the security-path classifier N times — a high-confidence
- * malicious signal, safe to auto-block. "rate" is raw request volume alone, which a legitimate
- * but bursty client (health checks, retry storms) can trigger too, so it stays alert-only with
- * the manual "🚫 Chặn IP ngay" button.
+ * Auto-blocks on any detected anomaly (scan or rate) when IP_AUTO_BLOCK is on — originally scan
+ * was the only auto-blocked type since raw rate alone can come from a legitimate bursty client,
+ * but after reviewing real alert history the user asked to auto-block everything and drop the
+ * manual-approval step entirely. If blocking fails (or the flag is off), still fall through to
+ * the Telegram alert with a manual button so the signal isn't silently lost.
  */
 async function handleIpAnomaly(docker: Docker, ip: string, project: string, service: string, anomaly: IpAnomaly): Promise<void> {
-  if (anomaly.type === "scan" && env.IP_AUTO_BLOCK_SCAN && isBlockableIp(ip)) {
+  if (env.IP_AUTO_BLOCK && isBlockableIp(ip)) {
     try {
-      await blockIp(docker, ip, `Tự động chặn — quét ${anomaly.count} path đáng ngờ/5 phút`, "auto:scan-detector");
+      const reasonDetail =
+        anomaly.type === "scan" ? `quét ${anomaly.count} path đáng ngờ/5 phút` : `gọi API dồn dập ${anomaly.count} request/phút`;
+      await blockIp(docker, ip, `Tự động chặn — ${reasonDetail}`, "auto:ip-anomaly-detector");
       // No Telegram notification on success — silent by design; the block is visible in the
       // Security page's blocked-IP list. Still logged server-side for debuggability.
-      console.log(`[ip-anomaly] Auto-blocked ${ip} (${project}/${service}, ${anomaly.count} suspicious paths/5min)`);
+      console.log(`[ip-anomaly] Auto-blocked ${ip} (${project}/${service}, ${anomaly.type}: ${anomaly.count})`);
       return;
     } catch (error) {
       console.error(`[ip-anomaly] Auto-block failed for ${ip}:`, error instanceof Error ? error.message : error);
