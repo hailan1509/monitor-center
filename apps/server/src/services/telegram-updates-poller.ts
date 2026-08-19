@@ -234,7 +234,7 @@ export async function ingestTelegramUpdatesOnce(token: string, docker: Docker): 
       });
 
       if (payload?.text) {
-        void handleTelegramChat(String(chat.id), payload.text);
+        void handleTelegramChat(String(chat.id), payload.text, docker);
       }
     }
 

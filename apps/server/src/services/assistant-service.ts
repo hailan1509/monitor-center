@@ -4,10 +4,12 @@ import type { ChatTurn } from "@monitor-center/shared";
 import { env } from "../config/env.js";
 import { searchLogs } from "./log-repository.js";
 
-const anthropicClient = env.ANTHROPIC_API_KEY ? new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }) : null;
+// Exported so telegram-agent.ts (tool-use loop) can reuse the same clients instead of
+// re-instantiating — both are Anthropic-compatible and support the same tool_use API shape.
+export const anthropicClient = env.ANTHROPIC_API_KEY ? new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }) : null;
 // MiniMax's Anthropic-compatible endpoint — same @anthropic-ai/sdk client, just pointed at a
 // different baseURL. Primary "cheap" tier provider.
-const minimaxClient = env.MINIMAX_API_KEY ? new Anthropic({ apiKey: env.MINIMAX_API_KEY, baseURL: env.MINIMAX_BASE_URL }) : null;
+export const minimaxClient = env.MINIMAX_API_KEY ? new Anthropic({ apiKey: env.MINIMAX_API_KEY, baseURL: env.MINIMAX_BASE_URL }) : null;
 const openaiClient = env.OPENAI_API_KEY ? new OpenAI({ apiKey: env.OPENAI_API_KEY }) : null;
 // Self-hosted OmniRoute gateway — OpenAI-compatible endpoint fronting free-tier providers
 // (mistral, etc). Tried after MiniMax and before the paid Anthropic/OpenAI keys.
@@ -42,19 +44,8 @@ function isSecurityNoise(log: { metadata?: Record<string, unknown>; message: str
   return false;
 }
 
-export async function answerLogQuestion(input: {
-  question: string;
-  project?: string;
-  start?: string;
-  end?: string;
-  systemPrompt?: string;
-  extraContext?: string;
-  /** Prior turns in this conversation, oldest first — enables multi-turn follow-up questions. */
-  history?: ChatTurn[];
-  /** "cheap" (default) tries free/low-cost providers first; "strong" promotes the paid Claude
-   * model to the front, for deliberate incident investigation instead of routine questions. */
-  tier?: "cheap" | "strong";
-}) {
+/** Shared by answerLogQuestion and the Telegram agent — pulls recent error/fatal + 2h-window logs. */
+export async function buildLogContext(input: { project?: string; start?: string; end?: string }) {
   const now = new Date();
   const since24h = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
   const since2h = new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString();
@@ -101,7 +92,23 @@ export async function answerLogQuestion(input: {
     message: log.message
   }));
 
-  const logText = JSON.stringify(summary, null, 2);
+  return { summary, logText: JSON.stringify(summary, null, 2) };
+}
+
+export async function answerLogQuestion(input: {
+  question: string;
+  project?: string;
+  start?: string;
+  end?: string;
+  systemPrompt?: string;
+  extraContext?: string;
+  /** Prior turns in this conversation, oldest first — enables multi-turn follow-up questions. */
+  history?: ChatTurn[];
+  /** "cheap" (default) tries free/low-cost providers first; "strong" promotes the paid Claude
+   * model to the front, for deliberate incident investigation instead of routine questions. */
+  tier?: "cheap" | "strong";
+}) {
+  const { summary, logText } = await buildLogContext(input);
   const contextText = input.extraContext
     ? `${input.extraContext}\n\nLog gần nhất:\n${logText}`
     : logText;

@@ -1,6 +1,8 @@
+import type Docker from "dockerode";
 import type { ChatTurn } from "@monitor-center/shared";
 import { env } from "../config/env.js";
 import { answerLogQuestion } from "./assistant-service.js";
+import { runTelegramAgent } from "./telegram-agent.js";
 import { getLatestStats } from "./container-stats.js";
 import { getUptimeStatuses } from "./uptime-checker.js";
 
@@ -76,7 +78,7 @@ function buildSystemContext(): string {
   return lines.join("\n");
 }
 
-export async function handleTelegramChat(chatId: string, text: string): Promise<void> {
+export async function handleTelegramChat(chatId: string, text: string, docker: Docker): Promise<void> {
   if (!env.TELEGRAM_BOT_TOKEN) return;
   if (!text.trim()) return;
 
@@ -106,18 +108,26 @@ export async function handleTelegramChat(chatId: string, text: string): Promise<
     const systemContext = buildSystemContext();
     const history = getChatHistory(chatId);
 
-    const result = await answerLogQuestion({
-      question: text,
-      systemPrompt:
-        "Bạn là trợ lý giám sát hệ thống server. Trả lời bằng tiếng Việt, ngắn gọn và rõ ràng. " +
-        "Dựa vào dữ liệu log và thông tin hệ thống được cung cấp. " +
-        "Nếu không có đủ thông tin, hãy nói rõ. Không bịa đặt.",
-      extraContext: systemContext,
-      history
-    });
+    // Agent path can restart containers / block-unblock IPs / check status / silence alerts on
+    // request. Falls back to the plain log Q&A if no Anthropic-compatible provider is configured
+    // or every candidate errors out.
+    let answer = await runTelegramAgent(docker, text, systemContext, history);
 
-    appendChatHistory(chatId, text, result.answer);
-    await sendReply(chatId, result.answer);
+    if (answer === null) {
+      const result = await answerLogQuestion({
+        question: text,
+        systemPrompt:
+          "Bạn là trợ lý giám sát hệ thống server. Trả lời bằng tiếng Việt, ngắn gọn và rõ ràng. " +
+          "Dựa vào dữ liệu log và thông tin hệ thống được cung cấp. " +
+          "Nếu không có đủ thông tin, hãy nói rõ. Không bịa đặt.",
+        extraContext: systemContext,
+        history
+      });
+      answer = result.answer;
+    }
+
+    appendChatHistory(chatId, text, answer);
+    await sendReply(chatId, answer);
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     await sendReply(chatId, `❌ Không xử lý được: ${msg}`);
