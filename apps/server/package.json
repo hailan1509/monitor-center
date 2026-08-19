@@ -11,7 +11,6 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
-    "@google/generative-ai": "^0.24.1",
     "@monitor-center/shared": "file:../../packages/shared",
     "bcryptjs": "^2.4.3",
     "connect-pg-simple": "^10.0.0",

@@ -9,6 +9,7 @@ import { handleTelegramChat } from "./telegram-chat-handler.js";
 import { runAlertAiAnalysis } from "./telegram-error-alerts.js";
 import { silenceManager } from "./silence-manager.js";
 import { blockIp, isBlockableIp } from "./ip-blocklist.js";
+import { restartContainer } from "./container-actions.js";
 
 const SILENCE_DURATION_MS = 60 * 60 * 1000;
 
@@ -83,7 +84,8 @@ async function sendPlainMessage(token: string, chatId: string, text: string) {
 
 /**
  * callback_data encodes "action:rest". For "silence"/"aidetail", rest is "project:service"
- * (service may itself contain ":" so it's not re-split). For "blockip", rest is just the IP.
+ * (service may itself contain ":" so it's not re-split). For "blockip"/"restartcrash", rest is
+ * just the IP / container name.
  */
 async function handleCallbackQuery(token: string, query: CallbackQuery, docker: Docker) {
   const chatId = query.message?.chat?.id;
@@ -109,6 +111,23 @@ async function handleCallbackQuery(token: string, query: CallbackQuery, docker: 
       await sendPlainMessage(token, String(chatId), `🚫 Đã chặn IP ${ip} trên firewall VPS.`);
     } catch (error) {
       await sendPlainMessage(token, String(chatId), `❌ Không chặn được ${ip}: ${error instanceof Error ? error.message : "lỗi không rõ"}`);
+    }
+    return;
+  }
+
+  if (action === "restartcrash") {
+    const containerName = rest;
+    await answerCallbackQuery(token, query.id, "Đang khởi động lại...");
+    try {
+      // dockerode resolves either a container ID or name here — the alert only carries the name.
+      await restartContainer(docker, containerName);
+      await sendPlainMessage(token, String(chatId), `🔧 Đã khởi động lại container ${containerName}.`);
+    } catch (error) {
+      await sendPlainMessage(
+        token,
+        String(chatId),
+        `❌ Không khởi động lại được ${containerName}: ${error instanceof Error ? error.message : "lỗi không rõ"}`
+      );
     }
     return;
   }

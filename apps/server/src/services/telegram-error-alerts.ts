@@ -203,9 +203,10 @@ export async function sendCrashAlert(info: CrashInfo): Promise<void> {
 
   void broadcastText(lines.join("\n"), [
     [
-      { text: "🔇 Im lặng 1h", callback_data: `silence:${info.project}:${info.service}` },
-      { text: "🤖 Phân tích sâu hơn", callback_data: `aidetail:${info.project}:${info.service}` }
-    ]
+      { text: "🔧 Khởi động lại container", callback_data: `restartcrash:${info.containerName}` },
+      { text: "🔇 Im lặng 1h", callback_data: `silence:${info.project}:${info.service}` }
+    ],
+    [{ text: "🤖 Phân tích sâu hơn", callback_data: `aidetail:${info.project}:${info.service}` }]
   ]);
 
   // AI root-cause analysis runs after the base alert so delivery isn't delayed by the AI call.
@@ -265,13 +266,7 @@ export async function sendSpikeAlert(
 
 // ─── IP anomaly alert ─────────────────────────────────────────────────────────
 
-export async function sendIpAnomalyAlert(
-  ip: string,
-  project: string,
-  service: string,
-  anomaly: IpAnomaly,
-  options?: { autoBlocked?: boolean }
-): Promise<void> {
+export async function sendIpAnomalyAlert(ip: string, project: string, service: string, anomaly: IpAnomaly): Promise<void> {
   if (!env.TELEGRAM_BOT_TOKEN) return;
   if (!env.TELEGRAM_ERROR_ALERTS_ENABLED) return;
 
@@ -289,12 +284,6 @@ export async function sendIpAnomalyAlert(
     detailLine,
     ...pathLines
   ];
-
-  if (options?.autoBlocked) {
-    lines.push("✅ Đã tự động chặn trên firewall VPS.");
-    void broadcastText(lines.join("\n"));
-    return;
-  }
 
   void broadcastText(lines.join("\n"), [[{ text: "🚫 Chặn IP ngay", callback_data: `blockip:${ip}` }]]);
 }

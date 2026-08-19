@@ -12,9 +12,13 @@ const envSchema = z.object({
   ANTHROPIC_MAX_OUTPUT_TOKENS: z.coerce.number().min(64).max(8192).default(2048),
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_MODEL: z.string().default("gpt-4.1-mini"),
-  GEMINI_API_KEY: z.string().optional(),
-  GEMINI_MODEL: z.string().default("gemini-flash-latest"),
-  GEMINI_MAX_OUTPUT_TOKENS: z.coerce.number().min(64).max(8192).default(2048),
+  /** MiniMax's Anthropic-compatible endpoint (https://api.minimax.io/anthropic) — called via
+   * @anthropic-ai/sdk with a custom baseURL, same SDK as the real ANTHROPIC_API_KEY client below.
+   * Primary "cheap" tier provider, replacing Gemini. */
+  MINIMAX_API_KEY: z.string().optional(),
+  MINIMAX_BASE_URL: z.string().default("https://api.minimax.io/anthropic"),
+  MINIMAX_MODEL: z.string().default("MiniMax-M2.7-highspeed"),
+  MINIMAX_MAX_OUTPUT_TOKENS: z.coerce.number().min(64).max(8192).default(2048),
   /** Self-hosted OmniRoute gateway (VPS) — OpenAI-compatible endpoint fronting several free-tier
    * providers. Used as a free fallback tier before the paid ANTHROPIC/OPENAI keys are hit. */
   OMNIROUTE_BASE_URL: z.string().optional(),

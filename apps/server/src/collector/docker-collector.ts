@@ -79,7 +79,9 @@ async function handleIpAnomaly(docker: Docker, ip: string, project: string, serv
   if (anomaly.type === "scan" && env.IP_AUTO_BLOCK_SCAN && isBlockableIp(ip)) {
     try {
       await blockIp(docker, ip, `Tự động chặn — quét ${anomaly.count} path đáng ngờ/5 phút`, "auto:scan-detector");
-      await sendIpAnomalyAlert(ip, project, service, anomaly, { autoBlocked: true });
+      // No Telegram notification on success — silent by design; the block is visible in the
+      // Security page's blocked-IP list. Still logged server-side for debuggability.
+      console.log(`[ip-anomaly] Auto-blocked ${ip} (${project}/${service}, ${anomaly.count} suspicious paths/5min)`);
       return;
     } catch (error) {
       console.error(`[ip-anomaly] Auto-block failed for ${ip}:`, error instanceof Error ? error.message : error);

@@ -1,15 +1,16 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import OpenAI from "openai";
 import type { ChatTurn } from "@monitor-center/shared";
 import { env } from "../config/env.js";
 import { searchLogs } from "./log-repository.js";
 
 const anthropicClient = env.ANTHROPIC_API_KEY ? new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }) : null;
-const geminiClient = env.GEMINI_API_KEY ? new GoogleGenerativeAI(env.GEMINI_API_KEY) : null;
+// MiniMax's Anthropic-compatible endpoint — same @anthropic-ai/sdk client, just pointed at a
+// different baseURL. Primary "cheap" tier provider.
+const minimaxClient = env.MINIMAX_API_KEY ? new Anthropic({ apiKey: env.MINIMAX_API_KEY, baseURL: env.MINIMAX_BASE_URL }) : null;
 const openaiClient = env.OPENAI_API_KEY ? new OpenAI({ apiKey: env.OPENAI_API_KEY }) : null;
 // Self-hosted OmniRoute gateway — OpenAI-compatible endpoint fronting free-tier providers
-// (opencode/mistral/pollinations). Tried after Gemini and before the paid Anthropic/OpenAI keys.
+// (mistral, etc). Tried after MiniMax and before the paid Anthropic/OpenAI keys.
 const omnirouteClient =
   env.OMNIROUTE_BASE_URL && env.OMNIROUTE_API_KEY
     ? new OpenAI({ apiKey: env.OMNIROUTE_API_KEY, baseURL: env.OMNIROUTE_BASE_URL })
@@ -24,12 +25,6 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): 
       setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(timeoutMs / 1000)}s`)), timeoutMs);
     })
   ]);
-}
-
-function normalizeGeminiModelName(model: string) {
-  // The models list API returns names like "models/gemini-2.5-flash".
-  // The Node SDK expects just "gemini-2.5-flash" (without the "models/" prefix).
-  return model.replace(/^models\//, "");
 }
 
 function isSecurityNoise(log: { metadata?: Record<string, unknown>; message: string; project: string; service: string }) {
@@ -123,38 +118,32 @@ export async function answerLogQuestion(input: {
   // Each provider attempt is only attempted if configured, and a failure falls through to the
   // next one instead of failing the whole request. Order depends on `tier` (see below).
   type Attempt = { label: string; run: () => Promise<string> };
-  let geminiAttempt: Attempt | null = null;
+  let minimaxAttempt: Attempt | null = null;
   const omnirouteAttempts: Attempt[] = [];
   let anthropicAttempt: Attempt | null = null;
   let openaiAttempt: Attempt | null = null;
 
-  if (geminiClient) {
-    geminiAttempt = {
-      label: "Gemini",
+  if (minimaxClient) {
+    minimaxAttempt = {
+      label: "MiniMax",
       run: async () => {
-        const model = geminiClient.getGenerativeModel({
-          model: normalizeGeminiModelName(env.GEMINI_MODEL),
-          systemInstruction: systemText
-        });
-
-        const historyContents = history.map((turn) => ({
-          role: turn.role === "assistant" ? "model" : "user",
-          parts: [{ text: turn.text }]
-        }));
-
-        const result = await withTimeout(
-          model.generateContent({
-            contents: [...historyContents, { role: "user", parts: [{ text: userTurnText }] }],
-            generationConfig: {
-              temperature: 0.2,
-              maxOutputTokens: env.GEMINI_MAX_OUTPUT_TOKENS
-            }
+        const response = await withTimeout(
+          minimaxClient.messages.create({
+            model: env.MINIMAX_MODEL,
+            max_tokens: env.MINIMAX_MAX_OUTPUT_TOKENS,
+            system: systemText,
+            messages: [...history.map((turn) => ({ role: turn.role, content: turn.text })), { role: "user" as const, content: userTurnText }]
           }),
           env.AI_TIMEOUT_MS,
-          "Gemini"
+          "MiniMax"
         );
 
-        return result.response.text();
+        if (response.stop_reason === "refusal") {
+          return "MiniMax từ chối trả lời câu hỏi này. Hãy thử diễn đạt lại câu hỏi.";
+        }
+
+        const textBlock = response.content.find((block): block is Anthropic.TextBlock => block.type === "text");
+        return textBlock?.text ?? "";
       }
     };
   }
@@ -169,7 +158,7 @@ export async function answerLogQuestion(input: {
               model,
               stream: false,
               temperature: 0.2,
-              max_tokens: env.GEMINI_MAX_OUTPUT_TOKENS,
+              max_tokens: env.MINIMAX_MAX_OUTPUT_TOKENS,
               messages: [
                 { role: "system", content: systemText },
                 ...history.map((turn) => ({ role: turn.role, content: turn.text }) as const),
@@ -240,18 +229,18 @@ export async function answerLogQuestion(input: {
     };
   }
 
-  // "cheap" (default, for routine/frequent calls): Gemini → OmniRoute free tier → Claude → OpenAI.
+  // "cheap" (default, for routine/frequent calls): MiniMax → OmniRoute free tier → Claude → OpenAI.
   // "strong" (deliberate incident investigation): Claude promoted to the front.
   const tier = input.tier ?? "cheap";
   const attempts: Attempt[] =
     tier === "strong"
-      ? [anthropicAttempt, geminiAttempt, ...omnirouteAttempts, openaiAttempt].filter((a): a is Attempt => a !== null)
-      : [geminiAttempt, ...omnirouteAttempts, anthropicAttempt, openaiAttempt].filter((a): a is Attempt => a !== null);
+      ? [anthropicAttempt, minimaxAttempt, ...omnirouteAttempts, openaiAttempt].filter((a): a is Attempt => a !== null)
+      : [minimaxAttempt, ...omnirouteAttempts, anthropicAttempt, openaiAttempt].filter((a): a is Attempt => a !== null);
 
   if (attempts.length === 0) {
     return {
       answer:
-        "Chưa cấu hình AI key. Hãy set GEMINI_API_KEY (khuyến nghị, miễn phí), OMNIROUTE_API_KEY, ANTHROPIC_API_KEY, hoặc OPENAI_API_KEY để bật AI assistant.",
+        "Chưa cấu hình AI key. Hãy set MINIMAX_API_KEY (khuyến nghị), OMNIROUTE_API_KEY, ANTHROPIC_API_KEY, hoặc OPENAI_API_KEY để bật AI assistant.",
       context: summary
     };
   }
