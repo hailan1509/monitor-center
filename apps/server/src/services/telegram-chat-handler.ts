@@ -6,6 +6,7 @@ import { runTelegramAgent } from "./telegram-agent.js";
 import { getLatestStats } from "./container-stats.js";
 import { getUptimeStatuses } from "./uptime-checker.js";
 import { formatForTelegram } from "./telegram-format.js";
+import { trySendAsDocument } from "./telegram-report.js";
 
 const COOLDOWN_MS = 5_000;
 const lastHandledAt = new Map<string, number>();
@@ -54,6 +55,9 @@ async function telegramPost(method: string, body: Record<string, unknown>): Prom
 }
 
 async function sendReply(chatId: string, text: string) {
+  const token = env.TELEGRAM_BOT_TOKEN;
+  if (token && (await trySendAsDocument(token, chatId, text))) return;
+
   for (const chunk of chunkText(formatForTelegram(text))) {
     const result = await telegramPost("sendMessage", { chat_id: chatId, text: chunk, parse_mode: "Markdown" });
     if (!result.ok) {

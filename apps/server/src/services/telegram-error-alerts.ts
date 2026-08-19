@@ -6,6 +6,7 @@ import type { SpikeResult } from "./spike-detector.js";
 import type { IpAnomaly } from "./ip-anomaly-detector.js";
 import { answerLogQuestion } from "./assistant-service.js";
 import { formatForTelegram } from "./telegram-format.js";
+import { trySendAsDocument } from "./telegram-report.js";
 
 export type InlineKeyboardButton = { text: string; callback_data: string };
 
@@ -31,6 +32,8 @@ async function resolveRecipientChatIds(): Promise<string[]> {
 }
 
 async function sendTelegramText(token: string, chatId: string, text: string, buttons?: InlineKeyboardButton[][]) {
+  if (await trySendAsDocument(token, chatId, text, buttons)) return;
+
   const parts = chunkText(formatForTelegram(text));
   for (let i = 0; i < parts.length; i++) {
     // Buttons only make sense attached to the final chunk (the one the user reads last).

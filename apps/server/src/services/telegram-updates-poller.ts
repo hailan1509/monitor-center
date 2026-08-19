@@ -11,6 +11,7 @@ import { silenceManager } from "./silence-manager.js";
 import { blockIp, isBlockableIp } from "./ip-blocklist.js";
 import { restartContainer } from "./container-actions.js";
 import { formatForTelegram } from "./telegram-format.js";
+import { trySendAsDocument } from "./telegram-report.js";
 
 const SILENCE_DURATION_MS = 60 * 60 * 1000;
 
@@ -80,6 +81,8 @@ async function answerCallbackQuery(token: string, callbackQueryId: string, text:
 }
 
 async function sendPlainMessage(token: string, chatId: string, text: string) {
+  if (await trySendAsDocument(token, chatId, text)) return;
+
   const formatted = formatForTelegram(text);
   const result = await telegramApi(token, "sendMessage", { chat_id: chatId, text: formatted, parse_mode: "Markdown" });
   if (!result.ok) {
