@@ -119,15 +119,16 @@ export async function handleTelegramChat(chatId: string, text: string, docker: D
   void telegramPost("sendChatAction", { chat_id: chatId, action: "typing" });
 
   try {
-    const systemContext = buildSystemContext();
     const history = getChatHistory(chatId);
 
     // Agent path can restart containers / block-unblock IPs / check status / silence alerts on
-    // request. Falls back to the plain log Q&A if no Anthropic-compatible provider is configured
-    // or every candidate errors out.
-    let answer = await runTelegramAgent(docker, text, systemContext, history);
+    // request, pulling log/system context itself via tools only when actually needed (so an
+    // off-topic chat message doesn't force-feed it irrelevant log data). Falls back to the plain
+    // log Q&A if no Anthropic-compatible provider is configured or every candidate errors out.
+    let answer = await runTelegramAgent(docker, text, history);
 
     if (answer === null) {
+      const systemContext = buildSystemContext();
       const result = await answerLogQuestion({
         question: text,
         systemPrompt:

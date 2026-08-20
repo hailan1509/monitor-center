@@ -48,6 +48,16 @@ const tools: Anthropic.Tool[] = [
     input_schema: { type: "object", properties: {} }
   },
   {
+    name: "get_recent_logs",
+    description:
+      "Lấy log lỗi/fatal gần đây (24h) và log gần nhất (2h) từ hệ thống. Dùng khi câu hỏi liên quan tới lỗi, sự cố, " +
+      "hoặc trạng thái log — không dùng cho câu hỏi không liên quan tới hệ thống.",
+    input_schema: {
+      type: "object",
+      properties: { project: { type: "string", description: "Lọc theo project cụ thể, bỏ trống để lấy tất cả" } }
+    }
+  },
+  {
     name: "get_container_stats",
     description: "Xem CPU/RAM hiện tại của tất cả container đang chạy.",
     input_schema: { type: "object", properties: {} }
@@ -114,6 +124,11 @@ async function runTool(docker: Docker, name: string, rawInput: unknown): Promise
         ? list.map((b) => `${b.ip} — ${b.reason ?? "(không có lý do)"} — ${b.createdAt}`).join("\n")
         : "Không có IP nào đang bị chặn.";
     }
+    case "get_recent_logs": {
+      const project = typeof input.project === "string" && input.project ? input.project : undefined;
+      const { logText } = await buildLogContext({ project });
+      return logText || "Không có log nào gần đây.";
+    }
     case "get_container_stats": {
       const stats = getLatestStats();
       return stats.length
@@ -151,10 +166,13 @@ async function runTool(docker: Docker, name: string, rawInput: unknown): Promise
 }
 
 const AGENT_SYSTEM_PROMPT =
-  "Bạn là trợ lý vận hành hệ thống server qua Telegram. Trả lời bằng tiếng Việt, ngắn gọn, rõ ràng. " +
-  "Khi câu hỏi cần hành động cụ thể (restart container, chặn/bỏ chặn IP, xem trạng thái, tắt cảnh báo tạm thời), " +
-  "hãy dùng tool tương ứng thay vì chỉ mô tả. Chỉ dùng tool khi thực sự cần thiết và đã đủ thông tin " +
-  "(vd: biết chính xác tên container/IP) — nếu thiếu thông tin, hỏi lại người dùng thay vì đoán. " +
+  "Bạn là trợ lý vận hành hệ thống server qua Telegram, nhưng cũng trò chuyện bình thường như một trợ lý AI " +
+  "thông thường khi được hỏi chuyện ngoài lề — không né tránh, không cứng nhắc bắt mọi câu hỏi phải liên quan tới hệ thống. " +
+  "Trả lời bằng tiếng Việt, ngắn gọn, rõ ràng. " +
+  "QUAN TRỌNG: không có log/thông tin hệ thống nào được đính kèm sẵn — chỉ gọi tool khi câu hỏi thực sự cần dữ liệu " +
+  "đó (lỗi, sự cố, trạng thái container/uptime/đĩa, hành động cụ thể như restart/chặn IP). " +
+  "Với câu hỏi ngoài lề (chat thường, kiến thức chung, v.v.) thì trả lời thẳng bằng kiến thức của bạn, không gọi tool nào cả. " +
+  "Chỉ dùng tool khi đã đủ thông tin (vd: biết chính xác tên container/IP) — nếu thiếu, hỏi lại người dùng thay vì đoán. " +
   "Sau khi dùng tool xong, tóm tắt kết quả cho người dùng bằng ngôn ngữ tự nhiên. " +
   "Đây là tin nhắn Telegram, không phải tài liệu: không dùng bảng markdown, không dùng heading #, " +
   "ưu tiên gạch đầu dòng ngắn gọn và *in đậm* (một dấu sao) cho từ khoá quan trọng.";
@@ -215,18 +233,15 @@ async function runAgentLoop(
 /**
  * Tool-enabled Telegram agent — tries MiniMax then Claude (both Anthropic-compatible). Falls
  * back to null (caller should use the plain answerLogQuestion) if neither is configured or both fail.
+ *
+ * No log/system context is pre-fetched here (unlike answerLogQuestion) — the model pulls
+ * get_recent_logs/get_container_stats/get_uptime_status/get_disk_usage itself only when a
+ * question actually needs them, so an off-topic chat message doesn't burn tokens on irrelevant
+ * log dumps or wait on a DB query it'll never use.
  */
-export async function runTelegramAgent(
-  docker: Docker,
-  question: string,
-  systemContext: string,
-  history: ChatTurn[]
-): Promise<string | null> {
-  const { logText } = await buildLogContext({});
-  const userTurnText = `Bối cảnh hệ thống:\n${systemContext}\n\nLog gần đây:\n${logText}\n\nCâu hỏi: ${question}`;
-
+export async function runTelegramAgent(docker: Docker, question: string, history: ChatTurn[]): Promise<string | null> {
   const historyMessages: AnthropicMessageParam[] = history.map((turn) => ({ role: turn.role, content: turn.text }));
-  const initialMessages: AnthropicMessageParam[] = [...historyMessages, { role: "user", content: userTurnText }];
+  const initialMessages: AnthropicMessageParam[] = [...historyMessages, { role: "user", content: question }];
 
   const candidates: Array<{ client: Anthropic; model: string; maxTokens: number; label: string }> = [];
   if (minimaxClient) candidates.push({ client: minimaxClient, model: env.MINIMAX_MODEL, maxTokens: env.MINIMAX_MAX_OUTPUT_TOKENS, label: "MiniMax" });
