@@ -7,6 +7,8 @@ import { env } from "../config/env.js";
 import { getZonedCalendarDayStartToNow } from "./log-repository.js";
 import { answerLogQuestion } from "./assistant-service.js";
 import { listTelegramReportChatIds } from "./telegram-subscribers.js";
+import { formatForTelegram } from "./telegram-format.js";
+import { trySendAsDocument } from "./telegram-report.js";
 
 async function resolveRecipientChatIds(): Promise<string[]> {
   const fromDb = await listTelegramReportChatIds();
@@ -26,26 +28,37 @@ function localDateKeyInZone(timeZone: string, instant: Date) {
 }
 
 async function sendTelegramText(token: string, chatId: string, text: string) {
+  if (await trySendAsDocument(token, chatId, text)) return;
+
+  const formatted = formatForTelegram(text);
   const max = 3900;
   const chunks: string[] = [];
-  for (let i = 0; i < text.length; i += max) {
-    chunks.push(text.slice(i, i + max));
+  for (let i = 0; i < formatted.length; i += max) {
+    chunks.push(formatted.slice(i, i + max));
   }
 
   for (let i = 0; i < chunks.length; i++) {
     const part =
       chunks.length > 1 ? `${chunks[i]}\n\n(${i + 1}/${chunks.length})` : chunks[i];
-    const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    const baseBody = { chat_id: chatId, text: part, disable_web_page_preview: true };
+
+    let response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: part,
-        disable_web_page_preview: true
-      })
+      body: JSON.stringify({ ...baseBody, parse_mode: "Markdown" })
     });
+    let payload = (await response.json()) as { ok: boolean; description?: string };
 
-    const payload = (await response.json()) as { ok: boolean; description?: string };
+    if (!payload.ok) {
+      // Likely unbalanced * _ ` entities left over from AI output — resend plain rather than lose the digest.
+      response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(baseBody)
+      });
+      payload = (await response.json()) as { ok: boolean; description?: string };
+    }
+
     if (!payload.ok) {
       throw new Error(payload.description ?? `Telegram HTTP ${response.status}`);
     }
