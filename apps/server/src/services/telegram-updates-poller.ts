@@ -136,7 +136,12 @@ async function handleCallbackQuery(token: string, query: CallbackQuery, docker: 
       const report = await cleanupDiskSpace(docker);
       await sendPlainMessage(token, String(chatId), formatDiskCleanupReport(report), "Kết quả dọn dẹp ổ đĩa");
     } catch (error) {
-      await sendPlainMessage(token, String(chatId), `❌ Dọn dẹp thất bại: ${error instanceof Error ? error.message : "lỗi không rõ"}`);
+      await sendPlainMessage(
+        token,
+        String(chatId),
+        `❌ Dọn dẹp thất bại: ${error instanceof Error ? error.message : "lỗi không rõ"}`,
+        "Kết quả dọn dẹp ổ đĩa"
+      );
     }
     return;
   }

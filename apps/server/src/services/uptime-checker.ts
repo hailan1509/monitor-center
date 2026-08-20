@@ -92,7 +92,7 @@ async function maybeSendAlert(status: UptimeStatus): Promise<void> {
     `🌐 URL: ${status.url}`,
     `⚠️  ${statusLabel}${recoveredLine}`
   ];
-  void broadcastText(lines.join("\n"));
+  void broadcastText(lines.join("\n"), undefined, "Cảnh báo Service Down");
 }
 
 async function maybeSendRecoveryAlert(status: UptimeStatus): Promise<void> {
@@ -105,7 +105,7 @@ async function maybeSendRecoveryAlert(status: UptimeStatus): Promise<void> {
     `🌐 URL: ${status.url}`,
     `⚡ Latency: ${status.latencyMs}ms`
   ];
-  void broadcastText(lines.join("\n"));
+  void broadcastText(lines.join("\n"), undefined, "Service đã phục hồi");
 }
 
 export function startUptimeChecker(): void {

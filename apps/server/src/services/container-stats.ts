@@ -127,7 +127,7 @@ async function maybeSendMemoryAlert(snap: ContainerStatsSnapshot): Promise<void>
     `💾 Memory: ${snap.memoryPercent.toFixed(1)}% (${mb(snap.memoryUsageBytes)} / ${mb(snap.memoryLimitBytes)})`,
     `🖥️  CPU: ${snap.cpuPercent.toFixed(1)}%`
   ];
-  void broadcastText(lines.join("\n"));
+  void broadcastText(lines.join("\n"), undefined, "Cảnh báo Memory cao");
 }
 
 export function startContainerStatsPoller(

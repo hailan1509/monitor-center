@@ -100,7 +100,7 @@ async function checkDiskSpace(): Promise<void> {
     `⚠️ Có thể gây crash Postgres/container nếu đầy hẳn (đã từng xảy ra).`
   ];
 
-  void broadcastText(lines.join("\n"), [[{ text: "🧹 Dọn dẹp ngay", callback_data: "diskcleanup:go" }]]);
+  void broadcastText(lines.join("\n"), [[{ text: "🧹 Dọn dẹp ngay", callback_data: "diskcleanup:go" }]], "Cảnh báo Ổ đĩa gần đầy");
 }
 
 export function startDiskSpaceChecker(): void {
