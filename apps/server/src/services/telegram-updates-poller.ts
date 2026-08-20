@@ -81,8 +81,8 @@ async function answerCallbackQuery(token: string, callbackQueryId: string, text:
   await telegramApi(token, "answerCallbackQuery", { callback_query_id: callbackQueryId, text });
 }
 
-async function sendPlainMessage(token: string, chatId: string, text: string) {
-  if (await trySendAsDocument(token, chatId, text)) return;
+async function sendPlainMessage(token: string, chatId: string, text: string, title?: string) {
+  if (await trySendAsDocument(token, chatId, text, undefined, title)) return;
 
   const formatted = formatForTelegram(text);
   const result = await telegramApi(token, "sendMessage", { chat_id: chatId, text: formatted, parse_mode: "Markdown" });
@@ -118,9 +118,14 @@ async function handleCallbackQuery(token: string, query: CallbackQuery, docker: 
     await answerCallbackQuery(token, query.id, "Đang chặn...");
     try {
       await blockIp(docker, ip, "Chặn qua cảnh báo Telegram", `telegram:${chatId}`);
-      await sendPlainMessage(token, String(chatId), `🚫 Đã chặn IP ${ip} trên firewall VPS.`);
+      await sendPlainMessage(token, String(chatId), `🚫 Đã chặn IP ${ip} trên firewall VPS.`, "Kết quả chặn IP");
     } catch (error) {
-      await sendPlainMessage(token, String(chatId), `❌ Không chặn được ${ip}: ${error instanceof Error ? error.message : "lỗi không rõ"}`);
+      await sendPlainMessage(
+        token,
+        String(chatId),
+        `❌ Không chặn được ${ip}: ${error instanceof Error ? error.message : "lỗi không rõ"}`,
+        "Kết quả chặn IP"
+      );
     }
     return;
   }
@@ -129,7 +134,7 @@ async function handleCallbackQuery(token: string, query: CallbackQuery, docker: 
     await answerCallbackQuery(token, query.id, "Đang dọn dẹp...");
     try {
       const report = await cleanupDiskSpace(docker);
-      await sendPlainMessage(token, String(chatId), formatDiskCleanupReport(report));
+      await sendPlainMessage(token, String(chatId), formatDiskCleanupReport(report), "Kết quả dọn dẹp ổ đĩa");
     } catch (error) {
       await sendPlainMessage(token, String(chatId), `❌ Dọn dẹp thất bại: ${error instanceof Error ? error.message : "lỗi không rõ"}`);
     }
@@ -142,12 +147,13 @@ async function handleCallbackQuery(token: string, query: CallbackQuery, docker: 
     try {
       // dockerode resolves either a container ID or name here — the alert only carries the name.
       await restartContainer(docker, containerName);
-      await sendPlainMessage(token, String(chatId), `🔧 Đã khởi động lại container ${containerName}.`);
+      await sendPlainMessage(token, String(chatId), `🔧 Đã khởi động lại container ${containerName}.`, "Kết quả khởi động lại");
     } catch (error) {
       await sendPlainMessage(
         token,
         String(chatId),
-        `❌ Không khởi động lại được ${containerName}: ${error instanceof Error ? error.message : "lỗi không rõ"}`
+        `❌ Không khởi động lại được ${containerName}: ${error instanceof Error ? error.message : "lỗi không rõ"}`,
+        "Kết quả khởi động lại"
       );
     }
     return;
@@ -164,7 +170,7 @@ async function handleCallbackQuery(token: string, query: CallbackQuery, docker: 
   if (action === "silence") {
     silenceManager.silence(project, service, SILENCE_DURATION_MS);
     await answerCallbackQuery(token, query.id, "Đã im lặng 1h");
-    await sendPlainMessage(token, String(chatId), `🔇 Đã tắt alert cho ${project} / ${service} trong 1 giờ.`);
+    await sendPlainMessage(token, String(chatId), `🔇 Đã tắt alert cho ${project} / ${service} trong 1 giờ.`, "Kết quả tắt cảnh báo");
     return;
   }
 
@@ -178,7 +184,8 @@ async function handleCallbackQuery(token: string, query: CallbackQuery, docker: 
     await sendPlainMessage(
       token,
       String(chatId),
-      analysis ? `🤖 Phân tích sâu — ${project} / ${service}:\n${analysis}` : "❌ Không phân tích được lúc này, thử lại sau."
+      analysis ? `🤖 Phân tích sâu — ${project} / ${service}:\n${analysis}` : "❌ Không phân tích được lúc này, thử lại sau.",
+      "Phân tích sâu"
     );
     return;
   }

@@ -159,17 +159,18 @@ export async function trySendAsDocument(
   token: string,
   chatId: string,
   text: string,
-  buttons?: InlineKeyboardButton[][]
+  buttons?: InlineKeyboardButton[][],
+  title = "Báo cáo Monitor Center"
 ): Promise<boolean> {
   if (!looksStructured(text)) return false;
 
   try {
-    const html = renderReportHtml("Báo cáo Monitor Center", text);
+    const html = renderReportHtml(title, text);
     const filename = `bao-cao-${Date.now()}.html`;
 
     const form = new FormData();
     form.set("chat_id", chatId);
-    form.set("caption", "📄 Báo cáo có bảng/định dạng — mở file đính kèm để xem đầy đủ.");
+    form.set("caption", `📄 ${title} — mở file đính kèm để xem đầy đủ (có bảng/định dạng).`);
     if (buttons) form.set("reply_markup", JSON.stringify({ inline_keyboard: buttons }));
     form.set("document", new Blob([html], { type: "text/html" }), filename);
 

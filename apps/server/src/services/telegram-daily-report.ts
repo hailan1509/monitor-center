@@ -28,7 +28,7 @@ function localDateKeyInZone(timeZone: string, instant: Date) {
 }
 
 async function sendTelegramText(token: string, chatId: string, text: string) {
-  if (await trySendAsDocument(token, chatId, text)) return;
+  if (await trySendAsDocument(token, chatId, text, undefined, "Báo cáo log hàng ngày")) return;
 
   const formatted = formatForTelegram(text);
   const max = 3900;

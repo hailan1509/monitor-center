@@ -56,7 +56,7 @@ async function telegramPost(method: string, body: Record<string, unknown>): Prom
 
 async function sendReply(chatId: string, text: string) {
   const token = env.TELEGRAM_BOT_TOKEN;
-  if (token && (await trySendAsDocument(token, chatId, text))) return;
+  if (token && (await trySendAsDocument(token, chatId, text, undefined, "Trả lời trợ lý AI"))) return;
 
   for (const chunk of chunkText(formatForTelegram(text))) {
     const result = await telegramPost("sendMessage", { chat_id: chatId, text: chunk, parse_mode: "Markdown" });

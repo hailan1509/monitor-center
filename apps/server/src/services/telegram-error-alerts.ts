@@ -31,8 +31,8 @@ async function resolveRecipientChatIds(): Promise<string[]> {
   return [...new Set([...fromDb, ...fromEnv])];
 }
 
-async function sendTelegramText(token: string, chatId: string, text: string, buttons?: InlineKeyboardButton[][]) {
-  if (await trySendAsDocument(token, chatId, text, buttons)) return;
+async function sendTelegramText(token: string, chatId: string, text: string, buttons?: InlineKeyboardButton[][], title?: string) {
+  if (await trySendAsDocument(token, chatId, text, buttons, title)) return;
 
   const parts = chunkText(formatForTelegram(text));
   for (let i = 0; i < parts.length; i++) {
@@ -68,7 +68,7 @@ async function sendTelegramText(token: string, chatId: string, text: string, but
   }
 }
 
-export async function broadcastText(text: string, buttons?: InlineKeyboardButton[][]): Promise<void> {
+export async function broadcastText(text: string, buttons?: InlineKeyboardButton[][], title?: string): Promise<void> {
   const token = env.TELEGRAM_BOT_TOKEN;
   if (!token) return;
 
@@ -78,7 +78,7 @@ export async function broadcastText(text: string, buttons?: InlineKeyboardButton
   const errors: string[] = [];
   for (const chatId of chatIds) {
     try {
-      await sendTelegramText(token, chatId, text, buttons);
+      await sendTelegramText(token, chatId, text, buttons, title);
     } catch (error) {
       errors.push(`${chatId}: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -175,7 +175,7 @@ class TelegramErrorAlerter {
 
     const task = (async () => {
       try {
-        await broadcastText(formatAlert(log));
+        await broadcastText(formatAlert(log), undefined, "Cảnh báo lỗi hệ thống");
       } finally {
         this.#inflight.delete(key);
       }
@@ -218,13 +218,17 @@ export async function sendCrashAlert(info: CrashInfo): Promise<void> {
     `⚠️  ${exitLabel}`
   ];
 
-  void broadcastText(lines.join("\n"), [
+  void broadcastText(
+    lines.join("\n"),
     [
-      { text: "🔧 Khởi động lại container", callback_data: `restartcrash:${info.containerName}` },
-      { text: "🔇 Im lặng 1h", callback_data: `silence:${info.project}:${info.service}` }
+      [
+        { text: "🔧 Khởi động lại container", callback_data: `restartcrash:${info.containerName}` },
+        { text: "🔇 Im lặng 1h", callback_data: `silence:${info.project}:${info.service}` }
+      ],
+      [{ text: "🤖 Phân tích sâu hơn", callback_data: `aidetail:${info.project}:${info.service}` }]
     ],
-    [{ text: "🤖 Phân tích sâu hơn", callback_data: `aidetail:${info.project}:${info.service}` }]
-  ]);
+    "Cảnh báo Container Crash"
+  );
 
   // AI root-cause analysis runs after the base alert so delivery isn't delayed by the AI call.
   void (async () => {
@@ -234,7 +238,7 @@ export async function sendCrashAlert(info: CrashInfo): Promise<void> {
       `Container ${info.containerName} (service ${info.service}) vừa crash, ${exitLabel}. Dựa vào log gần nhất, nguyên nhân khả dĩ là gì?`
     );
     if (analysis) {
-      void broadcastText(`🤖 Phân tích AI — ${info.project} / ${info.service}:\n${analysis}`);
+      void broadcastText(`🤖 Phân tích AI — ${info.project} / ${info.service}:\n${analysis}`, undefined, "Phân tích AI — Container Crash");
     }
   })();
 }
@@ -261,12 +265,16 @@ export async function sendSpikeAlert(
     `⚡ ${spike.recentCount} errors trong 5 phút (${baselineLabel})`
   ];
 
-  void broadcastText(lines.join("\n"), [
+  void broadcastText(
+    lines.join("\n"),
     [
-      { text: "🔇 Im lặng 1h", callback_data: `silence:${project}:${service}` },
-      { text: "🤖 Phân tích sâu hơn", callback_data: `aidetail:${project}:${service}` }
-    ]
-  ]);
+      [
+        { text: "🔇 Im lặng 1h", callback_data: `silence:${project}:${service}` },
+        { text: "🤖 Phân tích sâu hơn", callback_data: `aidetail:${project}:${service}` }
+      ]
+    ],
+    "Cảnh báo Error Spike"
+  );
 
   // AI root-cause analysis runs after the base alert so delivery isn't delayed by the AI call.
   void (async () => {
@@ -276,7 +284,7 @@ export async function sendSpikeAlert(
       `Vừa phát hiện error spike: ${spike.recentCount} lỗi trong 5 phút (${baselineLabel}). Dựa vào log gần nhất, nguyên nhân khả dĩ là gì?`
     );
     if (analysis) {
-      void broadcastText(`🤖 Phân tích AI — ${project} / ${service}:\n${analysis}`);
+      void broadcastText(`🤖 Phân tích AI — ${project} / ${service}:\n${analysis}`, undefined, "Phân tích AI — Error Spike");
     }
   })();
 }
@@ -302,5 +310,5 @@ export async function sendIpAnomalyAlert(ip: string, project: string, service: s
     ...pathLines
   ];
 
-  void broadcastText(lines.join("\n"), [[{ text: "🚫 Chặn IP ngay", callback_data: `blockip:${ip}` }]]);
+  void broadcastText(lines.join("\n"), [[{ text: "🚫 Chặn IP ngay", callback_data: `blockip:${ip}` }]], "Cảnh báo IP bất thường");
 }
