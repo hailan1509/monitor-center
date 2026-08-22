@@ -277,8 +277,14 @@ export async function ingestTelegramUpdatesOnce(token: string, docker: Docker): 
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       console.warn("[telegram] getUpdates: request timed out (15s)");
+    } else if (error instanceof Error) {
+      console.warn(
+        "[telegram] ingestTelegramUpdatesOnce:",
+        error.message,
+        error.cause instanceof Error ? `(cause: ${error.cause.message})` : error.cause ?? ""
+      );
     } else {
-      console.warn("[telegram] ingestTelegramUpdatesOnce:", error instanceof Error ? error.message : error);
+      console.warn("[telegram] ingestTelegramUpdatesOnce:", error);
     }
   } finally {
     clearTimeout(timer);
