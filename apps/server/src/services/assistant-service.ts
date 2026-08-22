@@ -10,17 +10,19 @@ export const anthropicClient = env.ANTHROPIC_API_KEY ? new Anthropic({ apiKey: e
 // MiniMax's Anthropic-compatible endpoint — same @anthropic-ai/sdk client, just pointed at a
 // different baseURL. Primary "cheap" tier provider.
 export const minimaxClient = env.MINIMAX_API_KEY ? new Anthropic({ apiKey: env.MINIMAX_API_KEY, baseURL: env.MINIMAX_BASE_URL }) : null;
-const openaiClient = env.OPENAI_API_KEY ? new OpenAI({ apiKey: env.OPENAI_API_KEY }) : null;
+export const openaiClient = env.OPENAI_API_KEY ? new OpenAI({ apiKey: env.OPENAI_API_KEY }) : null;
 // Self-hosted OmniRoute gateway — OpenAI-compatible endpoint fronting free-tier providers
 // (mistral, etc). Tried after MiniMax and before the paid Anthropic/OpenAI keys.
-const omnirouteClient =
+export const omnirouteClient =
   env.OMNIROUTE_BASE_URL && env.OMNIROUTE_API_KEY
     ? new OpenAI({ apiKey: env.OMNIROUTE_API_KEY, baseURL: env.OMNIROUTE_BASE_URL })
     : null;
 
 export type { ChatTurn };
 
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+// Exported so assistant-agent.ts (tool-use loop for the web Assistant page) can share the same
+// per-call timeout behavior instead of duplicating it.
+export function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
   return Promise.race([
     promise,
     new Promise<T>((_resolve, reject) => {

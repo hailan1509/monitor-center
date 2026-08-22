@@ -117,7 +117,7 @@ export const api = {
       id: string;
       status: "queued" | "running" | "done" | "error";
       progress?: string;
-      result?: { answer: string; context: Array<Record<string, unknown>> };
+      result?: { answer: string };
       error?: string;
     }>(`/api/assistant/jobs/${encodeURIComponent(jobId)}`, undefined, { silent: true }),
   users: () => request<{ users: Array<User & { createdAt: string }> }>("/api/users"),

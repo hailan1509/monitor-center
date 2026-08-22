@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { AssistantRequest } from "@monitor-center/shared";
-import { answerLogQuestion } from "./assistant-service.js";
+import { answerAssistantQuestion, getToolProgressLabel } from "./assistant-agent.js";
 
 export type AssistantJobStatus = "queued" | "running" | "done" | "error";
 
@@ -10,7 +10,7 @@ export type AssistantJob = {
   createdAt: number;
   updatedAt: number;
   progress?: string;
-  result?: { answer: string; context: Array<Record<string, unknown>> };
+  result?: { answer: string };
   error?: string;
 };
 
@@ -28,7 +28,7 @@ export function createAssistantJob(input: AssistantRequest) {
     status: "queued",
     createdAt: now(),
     updatedAt: now(),
-    progress: "Queued"
+    progress: "Đang xếp hàng…"
   };
   jobs.set(id, job);
 
@@ -37,20 +37,26 @@ export function createAssistantJob(input: AssistantRequest) {
     const current = jobs.get(id);
     if (!current) return;
     current.status = "running";
-    current.progress = "Collecting logs";
+    current.progress = "Đang suy nghĩ…";
     current.updatedAt = now();
 
     try {
-      current.progress = "Calling AI model";
-      current.updatedAt = now();
-      const result = await answerLogQuestion(input);
+      const result = await answerAssistantQuestion({
+        ...input,
+        onToolCall: (toolName) => {
+          const job = jobs.get(id);
+          if (!job) return;
+          job.progress = getToolProgressLabel(toolName);
+          job.updatedAt = now();
+        }
+      });
       current.status = "done";
-      current.progress = "Done";
+      current.progress = "Xong";
       current.result = result;
       current.updatedAt = now();
     } catch (error) {
       current.status = "error";
-      current.progress = "Failed";
+      current.progress = "Thất bại";
       current.error = error instanceof Error ? error.message : "Assistant job failed";
       current.updatedAt = now();
     }

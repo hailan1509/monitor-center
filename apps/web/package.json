@@ -11,7 +11,9 @@
     "@monitor-center/shared": "file:../../packages/shared",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-router-dom": "^6.30.4"
+    "react-markdown": "^10.1.0",
+    "react-router-dom": "^6.30.4",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@types/react": "^19.0.10",
