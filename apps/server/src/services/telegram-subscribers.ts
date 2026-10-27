@@ -27,6 +27,11 @@ export async function upsertTelegramReportSubscriber(input: {
   );
 }
 
+export async function removeTelegramReportSubscriber(chatId: string): Promise<boolean> {
+  const result = await pool.query(`DELETE FROM telegram_report_subscribers WHERE chat_id = $1`, [chatId]);
+  return (result.rowCount ?? 0) > 0;
+}
+
 export async function getTelegramPollLastUpdateId(): Promise<number> {
   const result = await pool.query<{ last_update_id: string }>(
     `SELECT last_update_id FROM telegram_bot_poll_state WHERE id = 1 LIMIT 1`

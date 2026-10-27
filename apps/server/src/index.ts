@@ -19,6 +19,12 @@ import { startUptimeChecker } from "./services/uptime-checker.js";
 import { reapplyAllBlocks } from "./services/ip-blocklist.js";
 import { startDiskSpaceChecker } from "./services/disk-space.js";
 
+// Fire-and-forget calls (`void somePromise()`) are all over this service. Since Node 15 a single rejected one
+// ends the process, which silently stopped all monitoring. Log it and keep running instead.
+process.on("unhandledRejection", (reason) => {
+  console.error("[process] unhandled rejection", reason);
+});
+
 async function main() {
   await ensureDatabaseReady();
 

@@ -35,6 +35,9 @@ function shouldSkipLine(line: string, service: string): boolean {
   if (/postgres/i.test(service)) {
     if (/\bcheckpoint\s+(starting|complete)\b/i.test(trimmed)) return true;
     if (/\bautovacuum\b.*\btable\b/i.test(trimmed)) return true;
+    // The echoed SQL after an error is just context for the preceding ERROR line; as its own
+    // stderr line it would be classified (and alerted) as a second, separate fatal.
+    if (/\bSTATEMENT:\s/.test(trimmed)) return true;
   }
 
   // MySQL deprecated auth plugin warning — fires on every connection, never actionable
@@ -63,7 +66,12 @@ function inferPostgresSeverity(message: string) {
 
   const token = match[1].toUpperCase();
   if (token === "FATAL" || token === "PANIC") return "fatal";
-  if (token === "ERROR") return "error";
+  if (token === "ERROR") {
+    // Bad-query errors (typo'd column, duplicate key, user-cancelled statement) are client-side
+    // mistakes, not a database malfunction — keep them visible but don't page on them.
+    if (/does not exist|syntax error at|duplicate key value|canceling statement due to user request/i.test(message)) return "warn";
+    return "error";
+  }
   if (token === "WARNING") return "warn";
   // LOG/INFO/NOTICE are normal operation.
   return "info";
@@ -270,7 +278,12 @@ export class DockerCollector {
           const category = isSecurity ? "security" : "system";
           const baseLevel = inferLogLevel(line, streamType);
           const postgresLevel = /postgres/i.test(service) ? inferPostgresSeverity(line) : null;
-          const level = postgresLevel ?? baseLevel;
+          let level = postgresLevel ?? baseLevel;
+          // Next.js logs this at error level when a bot/stale client posts an unknown Server Action
+          // ID (e.g. after a redeploy) — a rejected request, not an app fault.
+          if (/Failed to find Server Action|Server Reference ID did not match/i.test(line) && (level === "error" || level === "fatal")) {
+            level = "warn";
+          }
 
           const log: LogEvent & { containerId: string; fingerprint: string } = {
             id: randomUUID(),
@@ -292,7 +305,8 @@ export class DockerCollector {
             fingerprint: buildFingerprint(line)
           };
 
-          void insertLog(log);
+          // A failed insert must not become an unhandled rejection: it used to take the whole server down.
+          insertLog(log).catch((error) => console.error("[logs] could not store a log line", error));
           this.#hub.broadcastLog(log);
           void telegramErrorAlerter.maybeSend(log);
 

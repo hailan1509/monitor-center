@@ -1,6 +1,7 @@
+import { telegramFetch } from "./telegram-fetch.js";
 import type { LogEvent } from "@monitor-center/shared";
 import { env } from "../config/env.js";
-import { listTelegramReportChatIds } from "./telegram-subscribers.js";
+import { listTelegramReportChatIds, removeTelegramReportSubscriber } from "./telegram-subscribers.js";
 import { silenceManager } from "./silence-manager.js";
 import type { SpikeResult } from "./spike-detector.js";
 import type { IpAnomaly } from "./ip-anomaly-detector.js";
@@ -11,6 +12,13 @@ import { trySendAsDocument } from "./telegram-report.js";
 export type InlineKeyboardButton = { text: string; callback_data: string };
 
 type AlertLog = LogEvent & { fingerprint?: string };
+
+// Telegram's address ranges (149.154.160.0/20, 91.108.x, 2001:67c:4e8::/48) plus the generic
+// symptoms of failing to reach api.telegram.org.
+const TELEGRAM_NETWORK_NOISE_RE = /\b(?:149\.154\.\d+\.\d+|91\.108\.\d+\.\d+)\b|2001:67c:4e8|api\.telegram\.org/i;
+
+// Permanent delivery failures: the recipient will never receive alerts until they /start again.
+const TELEGRAM_DEAD_CHAT_RE = /bot was blocked by the user|chat not found|user is deactivated|bot was kicked/i;
 
 function normalizeLevels(levels: unknown): string[] {
   if (!Array.isArray(levels)) return ["error", "fatal"];
@@ -45,7 +53,7 @@ async function sendTelegramText(token: string, chatId: string, text: string, but
       ...(isLast && buttons ? { reply_markup: { inline_keyboard: buttons } } : {})
     };
 
-    let response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    let response = await telegramFetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...baseBody, parse_mode: "Markdown" })
@@ -54,7 +62,7 @@ async function sendTelegramText(token: string, chatId: string, text: string, but
 
     if (!payload.ok) {
       // Likely unbalanced * _ ` entities left over from AI output — resend plain rather than lose the alert.
-      response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      response = await telegramFetch(`https://api.telegram.org/bot${token}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(baseBody)
@@ -80,7 +88,15 @@ export async function broadcastText(text: string, buttons?: InlineKeyboardButton
     try {
       await sendTelegramText(token, chatId, text, buttons, title);
     } catch (error) {
-      errors.push(`${chatId}: ${error instanceof Error ? error.message : String(error)}`);
+      const message = error instanceof Error ? error.message : String(error);
+      if (TELEGRAM_DEAD_CHAT_RE.test(message)) {
+        // Drop the subscriber so we stop failing on every alert; /start re-adds them. Chats that
+        // come only from TELEGRAM_CHAT_ID aren't in the table, so this is a no-op for those.
+        const removed = await removeTelegramReportSubscriber(chatId).catch(() => false);
+        console.warn(`[telegram] Chat ${chatId} unreachable (${message})${removed ? " — removed from subscribers" : ""}`);
+        continue;
+      }
+      errors.push(`${chatId}: ${message}`);
     }
   }
   if (errors.length === chatIds.length) {
@@ -99,7 +115,9 @@ export async function runAlertAiAnalysis(project: string, service: string, quest
       systemPrompt:
         "Bạn là trợ lý giám sát hệ thống server. Dựa vào log được cung cấp, phân tích nguyên nhân khả dĩ, mức độ ảnh hưởng, " +
         "và đề xuất bước kiểm tra tiếp theo. Trả lời bằng tiếng Việt, ngắn gọn theo gạch đầu dòng, tối đa ~6 dòng. " +
-        "Đây là tin nhắn Telegram: không dùng bảng markdown, không dùng heading #.",
+        "Đây là tin nhắn Telegram: không dùng bảng markdown, không dùng heading #. " +
+        "Chỉ kết luận những gì log chứng minh được. Nếu log gốc đã nêu rõ nguyên nhân hoặc có link tài liệu (vd Next.js " +
+        "'Failed to find Server Action'), hãy dựa vào đó; không gán nguyên nhân cho dịch vụ khác (vd Telegram) chỉ vì các lỗi xuất hiện cùng lúc.",
       // Crash/spike alerts are an actual incident moment — worth the paid Claude model first.
       tier: "strong"
     });
@@ -156,6 +174,10 @@ class TelegramErrorAlerter {
 
     // Bỏ qua log nội bộ của chính monitor-server để tránh feedback loop.
     if (/^\[telegram\]|\[db\]/.test(log.message)) return;
+
+    // Network failures reaching Telegram itself (any container on this host) can't be delivered
+    // via Telegram anyway and would only pile up as noise once it recovers.
+    if (TELEGRAM_NETWORK_NOISE_RE.test(log.message)) return;
 
     // Bỏ qua nếu đang trong maintenance window.
     if (silenceManager.isSilenced(log.project, log.service)) return;

@@ -1,3 +1,4 @@
+import { telegramFetch } from "./telegram-fetch.js";
 import type { InlineKeyboardButton } from "./telegram-error-alerts.js";
 
 /** True when the text has markdown structure (tables/headings) that Telegram text can't render properly. */
@@ -174,7 +175,7 @@ export async function trySendAsDocument(
     if (buttons) form.set("reply_markup", JSON.stringify({ inline_keyboard: buttons }));
     form.set("document", new Blob([html], { type: "text/html" }), filename);
 
-    const response = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
+    const response = await telegramFetch(`https://api.telegram.org/bot${token}/sendDocument`, {
       method: "POST",
       body: form
     });

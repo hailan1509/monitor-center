@@ -48,6 +48,7 @@ services:
       IP_AUTO_BLOCK: ${IP_AUTO_BLOCK:-false}
       DISK_ALERT_THRESHOLD: ${DISK_ALERT_THRESHOLD:-85}
       DISK_CHECK_INTERVAL_MS: ${DISK_CHECK_INTERVAL_MS:-300000}
+    restart: unless-stopped
     ports:
       - "4000:4000"
     volumes:

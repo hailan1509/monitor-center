@@ -25,8 +25,34 @@ type PurgeFilters = {
   dryRun: boolean;
 };
 
-export async function ensureLogPartition(timestamp: string) {
-  await pool.query(partitionSql(new Date(timestamp)));
+// One entry per UTC day (the same boundary partitionSql uses). Every log line calls ensureLogPartition, so
+// without this the first burst after midnight fires many concurrent `CREATE TABLE IF NOT EXISTS ... PARTITION OF`
+// statements, and the losers of that race fail with "relation already exists" (this crashed the server on 2026-10-10).
+const partitionReady = new Map<string, Promise<void>>();
+
+async function createPartition(date: Date) {
+  try {
+    await pool.query(partitionSql(date));
+  } catch (error) {
+    // 42P07 duplicate_table / 23505 unique_violation: another connection created the same partition first.
+    // Postgres reports the error only after that other transaction committed, so the partition exists now.
+    const code = (error as { code?: string }).code;
+    if (code !== "42P07" && code !== "23505") throw error;
+  }
+}
+
+export function ensureLogPartition(timestamp: string): Promise<void> {
+  const date = new Date(timestamp);
+  const key = date.toISOString().slice(0, 10);
+  let pending = partitionReady.get(key);
+  if (!pending) {
+    pending = createPartition(date).catch((error) => {
+      partitionReady.delete(key); // allow a retry on the next log line
+      throw error;
+    });
+    partitionReady.set(key, pending);
+  }
+  return pending;
 }
 
 export async function insertLog(log: LogEvent & { containerId: string; fingerprint: string }) {

@@ -1,3 +1,4 @@
+import { telegramFetch } from "./telegram-fetch.js";
 import type Docker from "dockerode";
 import type { ChatTurn } from "@monitor-center/shared";
 import { env } from "../config/env.js";
@@ -43,7 +44,7 @@ async function telegramPost(method: string, body: Record<string, unknown>): Prom
   const token = env.TELEGRAM_BOT_TOKEN;
   if (!token) return { ok: false, description: "no token" };
   try {
-    const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+    const response = await telegramFetch(`https://api.telegram.org/bot${token}/${method}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)

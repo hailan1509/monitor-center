@@ -2,6 +2,7 @@
  * Báo cáo định kỳ qua Telegram.
  * Người nhận: tự động từ DB (poller getUpdates khi user nhắn bot private) + tùy chọn TELEGRAM_CHAT_ID.
  */
+import { telegramFetch } from "./telegram-fetch.js";
 import { schedule, validate } from "node-cron";
 import { env } from "../config/env.js";
 import { getZonedCalendarDayStartToNow } from "./log-repository.js";
@@ -42,7 +43,7 @@ async function sendTelegramText(token: string, chatId: string, text: string) {
       chunks.length > 1 ? `${chunks[i]}\n\n(${i + 1}/${chunks.length})` : chunks[i];
     const baseBody = { chat_id: chatId, text: part, disable_web_page_preview: true };
 
-    let response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    let response = await telegramFetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...baseBody, parse_mode: "Markdown" })
@@ -51,7 +52,7 @@ async function sendTelegramText(token: string, chatId: string, text: string) {
 
     if (!payload.ok) {
       // Likely unbalanced * _ ` entities left over from AI output — resend plain rather than lose the digest.
-      response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      response = await telegramFetch(`https://api.telegram.org/bot${token}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(baseBody)
