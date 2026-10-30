@@ -280,8 +280,12 @@ export class DockerCollector {
           const postgresLevel = /postgres/i.test(service) ? inferPostgresSeverity(line) : null;
           let level = postgresLevel ?? baseLevel;
           // Next.js logs this at error level when a bot/stale client posts an unknown Server Action
-          // ID (e.g. after a redeploy) — a rejected request, not an app fault.
-          if (/Failed to find Server Action|Server Reference ID did not match/i.test(line) && (level === "error" || level === "fatal")) {
+          // ID (e.g. after a redeploy) or a malformed Server Action request (scanner probes) — a
+          // rejected request, not an app fault.
+          if (
+            /Failed to find Server Action|Server Reference ID did not match|Invalid Server Actions request|Failed to parse body as FormData/i.test(line) &&
+            (level === "error" || level === "fatal")
+          ) {
             level = "warn";
           }
 
