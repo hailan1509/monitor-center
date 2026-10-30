@@ -59,6 +59,21 @@ function shouldSkipLine(line: string, service: string): boolean {
   return false;
 }
 
+const NETWORK_ERROR_RE = /\b(?:ENETUNREACH|EHOSTUNREACH|ETIMEDOUT|ECONNRESET|EAI_AGAIN|ENOTFOUND|UND_ERR_CONNECT_TIMEOUT)\b|Connect Timeout Error/i;
+// Connections to LAN/loopback addresses or the local DB/cache are our own infrastructure: a failure
+// there is a real incident, so it must stay an error.
+const INTERNAL_TARGET_RE =
+  /\b(?:10\.\d+\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+|127\.\d+\.\d+\.\d+|localhost)\b|mysql|postgres|redis|mongo|:(?:3306|5432|6379|27017)\b/i;
+
+/**
+ * Outbound connection failures to an external host (Telegram, AI APIs, third-party webhooks). The
+ * VPS has no IPv6 route and its path to some external services is flaky, so these come in bursts
+ * of identical lines; they aren't something the app can fix and shouldn't alert or count as a spike.
+ */
+function isExternalNetworkError(line: string): boolean {
+  return NETWORK_ERROR_RE.test(line) && !INTERNAL_TARGET_RE.test(line);
+}
+
 function inferPostgresSeverity(message: string) {
   // Postgres log lines often include "LOG:", "WARNING:", "ERROR:", etc.
   const match = message.match(/\b(LOG|INFO|NOTICE|WARNING|ERROR|FATAL|PANIC):/i);
@@ -283,6 +298,9 @@ export class DockerCollector {
           // ID (e.g. after a redeploy) or a malformed Server Action request (scanner probes) — a
           // rejected request, not an app fault. Same for an app's own Telegram long-poll hiccup
           // ("[telegram] poll error ..."): it retries itself and a network blip isn't actionable.
+          if (isExternalNetworkError(line) && (level === "error" || level === "fatal")) {
+            level = "warn";
+          }
           if (
             /Failed to find Server Action|Server Reference ID did not match|Invalid Server Actions request|Failed to parse body as FormData|^\[telegram\] poll error/i.test(line) &&
             (level === "error" || level === "fatal")
