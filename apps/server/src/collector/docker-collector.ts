@@ -281,9 +281,10 @@ export class DockerCollector {
           let level = postgresLevel ?? baseLevel;
           // Next.js logs this at error level when a bot/stale client posts an unknown Server Action
           // ID (e.g. after a redeploy) or a malformed Server Action request (scanner probes) — a
-          // rejected request, not an app fault.
+          // rejected request, not an app fault. Same for an app's own Telegram long-poll hiccup
+          // ("[telegram] poll error ..."): it retries itself and a network blip isn't actionable.
           if (
-            /Failed to find Server Action|Server Reference ID did not match|Invalid Server Actions request|Failed to parse body as FormData/i.test(line) &&
+            /Failed to find Server Action|Server Reference ID did not match|Invalid Server Actions request|Failed to parse body as FormData|^\[telegram\] poll error/i.test(line) &&
             (level === "error" || level === "fatal")
           ) {
             level = "warn";
